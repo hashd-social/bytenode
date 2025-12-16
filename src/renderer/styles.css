@@ -1,0 +1,378 @@
+/**
+ * ByteCave Desktop App Styles
+ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  color: #e0e0e0;
+  min-height: 100vh;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid rgba(0, 255, 255, 0.1);
+  -webkit-app-region: drag;
+}
+
+/* Spacer for macOS traffic lights */
+.header-spacer {
+  width: 70px;
+  flex-shrink: 0;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.logo-text {
+  font-size: 20px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #00ffff, #00ccff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #888;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.status-dot.online {
+  background: #00ff88;
+  box-shadow: 0 0 10px #00ff88;
+}
+
+.status-dot.offline {
+  background: #666;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 24px;
+  background: rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(0, 255, 255, 0.1);
+}
+
+.tab {
+  padding: 12px 20px;
+  background: transparent;
+  border: none;
+  color: #888;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 2px solid transparent;
+}
+
+.tab:hover {
+  color: #00ffff;
+}
+
+.tab.active {
+  color: #00ffff;
+  border-bottom-color: #00ffff;
+}
+
+/* Content */
+.content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+  position: relative;
+}
+
+.content::before {
+  content: '';
+  position: absolute;
+  top: 70%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 300px;
+  height: 300px;
+  background-image: url('./assets/bytebat.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  opacity: 1.0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Status Panel */
+.status-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.control-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #00ffff, #00ccff);
+  color: #1a1a2e;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0, 255, 255, 0.3);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #ff4444, #ff6666);
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(255, 68, 68, 0.3);
+}
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.stat-card {
+  background: rgba(0, 255, 255, 0.05);
+  border: 1px solid rgba(0, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #00ffff;
+}
+
+.stat-value.mono {
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 14px;
+}
+
+.mono {
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.stat-card.full-width {
+  grid-column: 1 / -1;
+}
+
+.stat-value.copyable {
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.stat-value.copyable:hover {
+  color: #00ffff;
+}
+
+/* Offline Message */
+.offline-message {
+  text-align: center;
+  padding: 48px;
+  color: #666;
+}
+
+.offline-message p {
+  margin-bottom: 8px;
+}
+
+/* Peers Panel */
+.peers-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 48px;
+  color: #666;
+}
+
+.empty-state p {
+  margin-bottom: 8px;
+}
+
+.peers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.peer-card {
+  background: rgba(0, 255, 255, 0.05);
+  border: 1px solid rgba(0, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.peer-id {
+  font-size: 14px;
+  color: #00ffff;
+  margin-bottom: 8px;
+}
+
+.peer-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: #888;
+}
+
+/* Settings Panel */
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 500px;
+}
+
+.setting-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setting-group label {
+  font-size: 12px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.setting-group.checkboxes {
+  gap: 12px;
+}
+
+.setting-group.checkboxes label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: none;
+  font-size: 14px;
+  color: #ccc;
+  cursor: pointer;
+}
+
+.setting-group.checkboxes input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #00ffff;
+}
+
+.input {
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #e0e0e0;
+  font-size: 14px;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #00ffff;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+}
+
+.input:read-only {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+select.input {
+  cursor: pointer;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 255, 0.5);
+}
