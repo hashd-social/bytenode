@@ -45,20 +45,24 @@ declare global {
 interface NodeStatus {
   running: boolean;
   status?: 'healthy' | 'degraded' | 'unhealthy';
+  version?: string;
   peerId?: string;
   publicKey?: string;
   ownerAddress?: string;
   peers?: number;
+  p2p?: {
+    connected: number;
+    replicating: number;
+    relay: number;
+  };
   connectedPeers?: number;
   storedBlobs?: number;
   totalSize?: number;
   totalStorageUsed?: number;
-  maxStorage?: number;
-  uptime?: number;
   latencyMs?: number;
-  version?: string;
-  contentTypes?: string[] | 'all';
+  uptime?: number;
   multiaddrs?: string[];
+  contentTypes?: string[] | 'all';
   metrics?: {
     requestsLastHour: number;
     avgResponseTime: number;
@@ -359,8 +363,17 @@ function App() {
                     <div className="stat-value">{config?.port || 'N/A'}</div>
                   </div>
                   <div className="stat-card">
-                    <div className="stat-label">Connected Peers</div>
-                    <div className="stat-value">{peers.length}</div>
+                    <div className="stat-label">P2P Network</div>
+                    <div className="stat-value">
+                      {status.p2p ? (
+                        <div style={{ fontSize: '0.9em', lineHeight: '1.6' }}>
+                          <div><strong>{status.p2p.connected}</strong> connected</div>
+                          <div><strong>{status.p2p.replicating}</strong> replicating</div>
+                        </div>
+                      ) : (
+                        peers.length
+                      )}
+                    </div>
                   </div>
                   <div className="stat-card">
                     <div className="stat-label">Avg Latency</div>

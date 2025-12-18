@@ -23,6 +23,8 @@ interface NodeConfig {
   p2pBootstrapPeers: string[];
   p2pRelayPeers: string[];
   p2pEnableRelay: boolean;
+  p2pEnableDHT: boolean;
+  p2pEnableMDNS: boolean;
   maxStorageMB: number;
   shardCount: number;
   nodeShards: ShardRange[];
@@ -58,6 +60,8 @@ const defaultConfig: NodeConfig = {
   p2pBootstrapPeers: envBootstrapPeers,
   p2pRelayPeers: envRelayPeers,
   p2pEnableRelay: true,
+  p2pEnableDHT: true,
+  p2pEnableMDNS: true,
   maxStorageMB: 1024,
   shardCount: 1024,
   nodeShards: [{ start: 0, end: 1023 }]

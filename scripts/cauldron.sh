@@ -36,11 +36,15 @@ echo ""
 # Path to local electron
 ELECTRON="$PROJECT_DIR/node_modules/.bin/electron"
 
+# Relay peer address (Docker relay on host network)
+RELAY_PEER="/ip4/172.18.0.2/tcp/4001/p2p/12D3KooWDUsTtqKh7VcnydpAe5G8SwiMKYramFny6caML58zbg9Y"
+
 # Launch Instance 1 (Bat Alpha) - Port 5001, P2P 5011-5012
 echo -e "${CYAN}🦇 Launching Bat Alpha (port 5001)...${NC}"
 BYTENODE_PORT=5001 \
 BYTENODE_NODE_ID=bat-alpha \
 BYTENODE_P2P_PORTS="5011,5012" \
+BYTENODE_RELAY_PEERS="$RELAY_PEER" \
 "$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-1" &
 PID1=$!
 sleep 2
@@ -50,6 +54,7 @@ echo -e "${GREEN}🦇 Launching Bat Beta (port 5002)...${NC}"
 BYTENODE_PORT=5002 \
 BYTENODE_NODE_ID=bat-beta \
 BYTENODE_P2P_PORTS="5021,5022" \
+BYTENODE_RELAY_PEERS="$RELAY_PEER" \
 "$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-2" &
 PID2=$!
 sleep 2
@@ -59,6 +64,7 @@ echo -e "${YELLOW}🦇 Launching Bat Gamma (port 5003)...${NC}"
 BYTENODE_PORT=5003 \
 BYTENODE_NODE_ID=bat-gamma \
 BYTENODE_P2P_PORTS="5031,5032" \
+BYTENODE_RELAY_PEERS="$RELAY_PEER" \
 "$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-3" &
 PID3=$!
 
