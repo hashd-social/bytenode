@@ -1,4 +1,4 @@
-# ByteCave Desktop
+# ByteNode
 
 Desktop application for managing ByteCave storage nodes with an intuitive GUI. Built with Electron, React, and TypeScript.
 
@@ -40,7 +40,7 @@ yarn package
 
 ### 1. Launch Application
 
-Open ByteCave Desktop and you'll see the main dashboard.
+Open ByteNode and you'll see the main dashboard.
 
 ### 2. Configure Node
 
