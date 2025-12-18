@@ -1,7 +1,7 @@
 {
-  "name": "bytecave-desktop",
+  "name": "bytenode",
   "version": "1.0.0",
-  "description": "ByteCave Desktop - GUI for running a ByteCave storage node",
+  "description": "ByteNode - GUI for running a ByteCave storage node",
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

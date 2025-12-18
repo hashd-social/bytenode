@@ -9,14 +9,26 @@ import * as path from 'path';
 import * as os from 'os';
 import Store from 'electron-store';
 
+interface ShardRange {
+  start: number;
+  end: number;
+}
+
 interface NodeConfig {
   nodeId: string;
   dataDir: string;
   port: number;
   p2pEnabled: boolean;
   p2pListenAddresses: string[];
+  p2pBootstrapPeers: string[];
+  p2pRelayPeers: string[];
+  p2pEnableRelay: boolean;
   maxStorageMB: number;
+  shardCount: number;
+  nodeShards: ShardRange[];
   ownerAddress?: string;
+  publicKey?: string;
+  contentTypes?: string; // 'all' or 'messages,posts,media,listings'
 }
 
 const store = new Store();
@@ -26,24 +38,41 @@ let nodeProcess: ChildProcess | null = null;
 let nodeRunning = false;
 
 // Get config from environment (for multi-instance testing) or use defaults
-const envPort = process.env.BYTECAVE_PORT ? parseInt(process.env.BYTECAVE_PORT) : 3004;
-const envNodeId = process.env.BYTECAVE_NODE_ID || `bytecave-${Date.now()}`;
-const envP2pPorts = process.env.BYTECAVE_P2P_PORTS?.split(',') || ['4001', '4002'];
+const envPort = process.env.BYTENODE_PORT ? parseInt(process.env.BYTENODE_PORT) : 5001;
+const envNodeId = process.env.BYTENODE_NODE_ID || `bytecave-${Date.now()}`;
+const envDataDir = process.env.BYTENODE_DATA_DIR || path.join(os.homedir(), '.bytecave');
+const envP2pPorts = process.env.BYTENODE_P2P_PORTS?.split(',') || ['4001', '4002'];
+const envRelayPeers = process.env.BYTENODE_RELAY_PEERS?.split(',') || [];
+const envBootstrapPeers = process.env.BYTENODE_BOOTSTRAP_PEERS?.split(',') || [];
 
 // Default config
 const defaultConfig: NodeConfig = {
   nodeId: envNodeId,
-  dataDir: path.join(os.homedir(), '.bytecave'),
+  dataDir: envDataDir,
   port: envPort,
   p2pEnabled: true,
   p2pListenAddresses: [
     `/ip4/0.0.0.0/tcp/${envP2pPorts[0]}`,
     `/ip4/0.0.0.0/tcp/${envP2pPorts[1] || parseInt(envP2pPorts[0]) + 1}/ws`
   ],
-  maxStorageMB: 1024
+  p2pBootstrapPeers: envBootstrapPeers,
+  p2pRelayPeers: envRelayPeers,
+  p2pEnableRelay: true,
+  maxStorageMB: 1024,
+  shardCount: 1024,
+  nodeShards: [{ start: 0, end: 1023 }]
 };
 
 function getConfig(): NodeConfig {
+  // In multi-instance mode, prioritize environment variables over stored config
+  const isMultiInstance = !!process.env.BYTENODE_PORT;
+  
+  if (isMultiInstance) {
+    // Use environment variables directly, don't merge with stored config
+    return defaultConfig;
+  }
+  
+  // Normal mode: merge stored config with defaults
   return {
     ...defaultConfig,
     ...store.get('nodeConfig', {}) as Partial<NodeConfig>
@@ -149,8 +178,15 @@ async function startNode(): Promise<void> {
     NODE_URL: `http://localhost:${config.port}`,
     P2P_ENABLED: String(config.p2pEnabled),
     P2P_LISTEN_ADDRESSES: config.p2pListenAddresses.join(','),
+    P2P_BOOTSTRAP_PEERS: config.p2pBootstrapPeers.join(','),
+    P2P_RELAY_PEERS: config.p2pRelayPeers.join(','),
+    P2P_ENABLE_RELAY: String(config.p2pEnableRelay),
     GC_MAX_STORAGE_MB: String(config.maxStorageMB),
-    OWNER_ADDRESS: config.ownerAddress || ''
+    SHARD_COUNT: String(config.shardCount),
+    NODE_SHARDS: JSON.stringify(config.nodeShards),
+    OWNER_ADDRESS: config.ownerAddress || '',
+    PUBLIC_KEY: config.publicKey || '',
+    CONTENT_TYPES: config.contentTypes || 'all'
   };
 
   console.log(`Starting bytecave-core from: ${corePath}`);
@@ -306,14 +342,26 @@ ipcMain.handle('node:status', async () => {
 });
 
 ipcMain.handle('node:peers', async () => {
-  // Return empty array - peer list not yet implemented in bytecave-core HTTP API
-  // The health endpoint only returns peer count, not peer details
   if (!nodeRunning) return [];
-  return [];
+  
+  const config = getConfig();
+  try {
+    const response = await fetch(`http://localhost:${config.port}/peers`);
+    const data = await response.json();
+    return data.peers || [];
+  } catch (error: any) {
+    console.error('[IPC] Failed to fetch peers:', error.message);
+    return [];
+  }
 });
 
 ipcMain.handle('config:get', () => {
   return getConfig();
+});
+
+ipcMain.handle('config:getRelayPeers', () => {
+  const config = getConfig();
+  return config.p2pRelayPeers || [];
 });
 
 ipcMain.handle('config:set', (_event, newConfig: Partial<NodeConfig>) => {
@@ -321,39 +369,188 @@ ipcMain.handle('config:set', (_event, newConfig: Partial<NodeConfig>) => {
   return { success: true };
 });
 
-// Prevent multiple instances
-const gotTheLock = app.requestSingleInstanceLock();
+ipcMain.handle('peer:connect', async (_event, multiaddr: string) => {
+  if (!nodeRunning) {
+    return { success: false, error: 'Node not running' };
+  }
 
-if (!gotTheLock) {
-  app.quit();
-} else {
-  app.on('second-instance', () => {
-    // Someone tried to run a second instance, focus our window
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
+  const config = getConfig();
+  try {
+    const response = await fetch(`http://localhost:${config.port}/peers/connect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ multiaddr })
+    });
+    
+    const result = await response.json();
+    return result;
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Node Policy IPC Handlers
+ipcMain.handle('policy:get-blocked-content', async () => {
+  const config = getConfig();
+  const blockedContentPath = path.join(config.dataDir, 'config', 'blocked-content.json');
+  try {
+    const fs = await import('fs/promises');
+    const content = await fs.readFile(blockedContentPath, 'utf-8');
+    return JSON.parse(content);
+  } catch (error: any) {
+    if (error.code === 'ENOENT') {
+      return { version: 1, updatedAt: Date.now(), cids: [], peerIds: [] };
     }
-  });
+    throw error;
+  }
+});
 
-  // App lifecycle
-  app.whenReady().then(() => {
-    createWindow();
-    createTray();
-
-    // Auto-start node if configured
-    if (store.get('autoStart', false)) {
-      startNode();
+ipcMain.handle('policy:block-cid', async (_event, cid: string) => {
+  const config = getConfig();
+  const blockedContentPath = path.join(config.dataDir, 'config', 'blocked-content.json');
+  const fs = await import('fs/promises');
+  
+  try {
+    const content = await fs.readFile(blockedContentPath, 'utf-8').catch(() => '{"version":1,"updatedAt":0,"cids":[],"peerIds":[]}');
+    const blocked = JSON.parse(content);
+    if (!blocked.cids.includes(cid.toLowerCase())) {
+      blocked.cids.push(cid.toLowerCase());
+      blocked.updatedAt = Date.now();
+      await fs.mkdir(path.dirname(blockedContentPath), { recursive: true });
+      await fs.writeFile(blockedContentPath, JSON.stringify(blocked, null, 2));
     }
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+});
 
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
-      } else {
-        mainWindow?.show();
+ipcMain.handle('policy:unblock-cid', async (_event, cid: string) => {
+  const config = getConfig();
+  const blockedContentPath = path.join(config.dataDir, 'config', 'blocked-content.json');
+  const fs = await import('fs/promises');
+  
+  try {
+    const content = await fs.readFile(blockedContentPath, 'utf-8');
+    const blocked = JSON.parse(content);
+    const index = blocked.cids.indexOf(cid.toLowerCase());
+    if (index > -1) {
+      blocked.cids.splice(index, 1);
+      blocked.updatedAt = Date.now();
+      await fs.writeFile(blockedContentPath, JSON.stringify(blocked, null, 2));
+    }
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('policy:block-peer', async (_event, peerId: string) => {
+  const config = getConfig();
+  const blockedContentPath = path.join(config.dataDir, 'config', 'blocked-content.json');
+  const fs = await import('fs/promises');
+  
+  try {
+    const content = await fs.readFile(blockedContentPath, 'utf-8').catch(() => '{"version":1,"updatedAt":0,"cids":[],"peerIds":[]}');
+    const blocked = JSON.parse(content);
+    if (!blocked.peerIds.includes(peerId)) {
+      blocked.peerIds.push(peerId);
+      blocked.updatedAt = Date.now();
+      await fs.mkdir(path.dirname(blockedContentPath), { recursive: true });
+      await fs.writeFile(blockedContentPath, JSON.stringify(blocked, null, 2));
+    }
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('policy:unblock-peer', async (_event, peerId: string) => {
+  const config = getConfig();
+  const blockedContentPath = path.join(config.dataDir, 'config', 'blocked-content.json');
+  const fs = await import('fs/promises');
+  
+  try {
+    const content = await fs.readFile(blockedContentPath, 'utf-8');
+    const blocked = JSON.parse(content);
+    const index = blocked.peerIds.indexOf(peerId);
+    if (index > -1) {
+      blocked.peerIds.splice(index, 1);
+      blocked.updatedAt = Date.now();
+      await fs.writeFile(blockedContentPath, JSON.stringify(blocked, null, 2));
+    }
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('policy:get-guilds', async () => {
+  const config = getConfig();
+  const guildsPath = path.join(config.dataDir, 'config', 'guilds.json');
+  try {
+    const fs = await import('fs/promises');
+    const content = await fs.readFile(guildsPath, 'utf-8');
+    return JSON.parse(content);
+  } catch (error: any) {
+    if (error.code === 'ENOENT') {
+      return { allowedGuilds: 'all', blockedGuilds: [] };
+    }
+    throw error;
+  }
+});
+
+ipcMain.handle('policy:set-guilds', async (_event, guildsConfig: any) => {
+  const config = getConfig();
+  const guildsPath = path.join(config.dataDir, 'config', 'guilds.json');
+  const fs = await import('fs/promises');
+  
+  try {
+    await fs.mkdir(path.dirname(guildsPath), { recursive: true });
+    await fs.writeFile(guildsPath, JSON.stringify(guildsConfig, null, 2));
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Prevent multiple instances (unless in multi-instance mode for testing)
+const isMultiInstance = !!process.env.BYTENODE_PORT;
+
+if (!isMultiInstance) {
+  const gotTheLock = app.requestSingleInstanceLock();
+
+  if (!gotTheLock) {
+    app.quit();
+  } else {
+    app.on('second-instance', () => {
+      // Someone tried to run a second instance, focus our window
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
       }
     });
-  });
+  }
 }
+
+// App lifecycle
+app.whenReady().then(() => {
+  createWindow();
+  createTray();
+
+  // Auto-start node if configured
+  if (store.get('autoStart', false)) {
+    startNode();
+  }
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    } else {
+      mainWindow?.show();
+    }
+  });
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

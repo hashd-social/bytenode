@@ -38,27 +38,27 @@ ELECTRON="$PROJECT_DIR/node_modules/.bin/electron"
 
 # Launch Instance 1 (Bat Alpha) - Port 5001, P2P 5011-5012
 echo -e "${CYAN}🦇 Launching Bat Alpha (port 5001)...${NC}"
-BYTECAVE_PORT=5001 \
-BYTECAVE_NODE_ID=bat-alpha \
-BYTECAVE_P2P_PORTS="5011,5012" \
+BYTENODE_PORT=5001 \
+BYTENODE_NODE_ID=bat-alpha \
+BYTENODE_P2P_PORTS="5011,5012" \
 "$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-1" &
 PID1=$!
 sleep 2
 
 # Launch Instance 2 (Bat Beta) - Port 5002, P2P 5021-5022
 echo -e "${GREEN}🦇 Launching Bat Beta (port 5002)...${NC}"
-BYTECAVE_PORT=5002 \
-BYTECAVE_NODE_ID=bat-beta \
-BYTECAVE_P2P_PORTS="5021,5022" \
+BYTENODE_PORT=5002 \
+BYTENODE_NODE_ID=bat-beta \
+BYTENODE_P2P_PORTS="5021,5022" \
 "$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-2" &
 PID2=$!
 sleep 2
 
 # Launch Instance 3 (Bat Gamma) - Port 5003, P2P 5031-5032
 echo -e "${YELLOW}🦇 Launching Bat Gamma (port 5003)...${NC}"
-BYTECAVE_PORT=5003 \
-BYTECAVE_NODE_ID=bat-gamma \
-BYTECAVE_P2P_PORTS="5031,5032" \
+BYTENODE_PORT=5003 \
+BYTENODE_NODE_ID=bat-gamma \
+BYTENODE_P2P_PORTS="5031,5032" \
 "$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-3" &
 PID3=$!
 

@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import bytebatLogo from './assets/bytebat.png';
+import { NodePolicyTab } from './NodePolicyTab';
 
 declare global {
   interface Window {
@@ -20,9 +21,22 @@ declare global {
         onPeerConnect: (callback: (peerId: string) => void) => void;
         onPeerDisconnect: (callback: (peerId: string) => void) => void;
       };
+      peer: {
+        connect: (multiaddr: string) => Promise<{ success: boolean; error?: string }>;
+      };
       config: {
         get: () => Promise<NodeConfig>;
         set: (config: Partial<NodeConfig>) => Promise<{ success: boolean }>;
+        getRelayPeers: () => Promise<string[]>;
+      };
+      policy: {
+        getBlockedContent: () => Promise<any>;
+        blockCid: (cid: string) => Promise<{ success: boolean }>;
+        unblockCid: (cid: string) => Promise<{ success: boolean }>;
+        blockPeer: (peerId: string) => Promise<{ success: boolean }>;
+        unblockPeer: (peerId: string) => Promise<{ success: boolean }>;
+        getGuilds: () => Promise<any>;
+        setGuilds: (config: any) => Promise<{ success: boolean }>;
       };
     };
   }
@@ -30,8 +44,10 @@ declare global {
 
 interface NodeStatus {
   running: boolean;
+  status?: 'healthy' | 'degraded' | 'unhealthy';
   peerId?: string;
   publicKey?: string;
+  ownerAddress?: string;
   peers?: number;
   connectedPeers?: number;
   storedBlobs?: number;
@@ -39,7 +55,22 @@ interface NodeStatus {
   totalStorageUsed?: number;
   maxStorage?: number;
   uptime?: number;
+  latencyMs?: number;
+  version?: string;
   contentTypes?: string[] | 'all';
+  multiaddrs?: string[];
+  metrics?: {
+    requestsLastHour: number;
+    avgResponseTime: number;
+    successRate: number;
+  };
+  integrity?: {
+    checked: number;
+    passed: number;
+    failed: number;
+    orphaned: number;
+    metadataTampered: number;
+  };
 }
 
 interface PeerInfo {
@@ -48,21 +79,30 @@ interface PeerInfo {
   contentTypes: string[] | 'all';
   lastSeen: number;
   reputation: number;
+  httpEndpoint?: string;
+  connected?: boolean;
+}
+
+interface ShardRange {
+  start: number;
+  end: number;
 }
 
 interface NodeConfig {
   nodeId: string;
   dataDir: string;
   port: number;
-  listenAddresses: string[];
-  bootstrapPeers: string[];
-  contentTypes: string[] | 'all';
+  p2pEnabled: boolean;
+  p2pListenAddresses: string[];
+  p2pBootstrapPeers: string[];
+  p2pRelayPeers: string[];
+  p2pEnableRelay: boolean;
   maxStorageMB: number;
-  enableRelay: boolean;
-  enableDHT: boolean;
-  enableMDNS: boolean;
-  httpPort: number;
+  shardCount: number;
+  nodeShards: ShardRange[];
   ownerAddress?: string;
+  publicKey?: string;
+  contentTypes?: string;
 }
 
 interface StartedData {
@@ -75,7 +115,13 @@ function App() {
   const [peers, setPeers] = useState<PeerInfo[]>([]);
   const [config, setConfig] = useState<NodeConfig | null>(null);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'status' | 'peers' | 'settings'>('status');
+  const [activeTab, setActiveTab] = useState<'status' | 'peers' | 'broadcast' | 'policy' | 'settings'>('status');
+  const [relayPeerIds, setRelayPeerIds] = useState<string[]>([]);
+  const [broadcasts, setBroadcasts] = useState<Array<{from: string; message: string; timestamp: number}>>([]);
+  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [peerMultiaddr, setPeerMultiaddr] = useState('');
+  const [connectingPeer, setConnectingPeer] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
 
   useEffect(() => {
     loadStatus();
@@ -83,12 +129,13 @@ function App() {
 
     window.bytecave.node.onStarted((data) => {
       setStatus(prev => ({ ...prev, running: true, peerId: data.peerId }));
-      loadStatus();
+      // Don't call loadStatus here - let the interval handle it
     });
 
     window.bytecave.node.onStopped(() => {
       setStatus({ running: false });
       setPeers([]);
+      setBroadcasts([]);
     });
 
     window.bytecave.node.onPeerConnect(() => {
@@ -98,16 +145,20 @@ function App() {
     window.bytecave.node.onPeerDisconnect(() => {
       loadPeers();
     });
+  }, []); // Empty deps - only run once on mount
+
+  // Separate effect for polling that has access to current state
+  useEffect(() => {
+    if (!status.running) return;
 
     const interval = setInterval(() => {
-      if (status.running) {
-        loadStatus();
-        loadPeers();
-      }
-    }, 5000);
+      loadStatus();
+      loadPeers();
+      loadBroadcasts();
+    }, 10000); // Poll every 10 seconds
 
     return () => clearInterval(interval);
-  }, [status.running]);
+  }, [status.running, config]); // Re-create interval when status.running or config changes
 
   const loadStatus = async () => {
     const s = await window.bytecave.node.status();
@@ -124,9 +175,30 @@ function App() {
     }
   };
 
+  const loadBroadcasts = async () => {
+    if (!config) return;
+    try {
+      const response = await fetch(`http://localhost:${config.port}/broadcasts`);
+      const data = await response.json();
+      setBroadcasts(data.broadcasts || []);
+    } catch (error) {
+      console.error('Failed to load broadcasts:', error);
+    }
+  };
+
   const loadConfig = async () => {
     const c = await window.bytecave.config.get();
+    console.log('[Renderer] Loaded config:', c);
+    console.log('[Renderer] p2pRelayPeers:', c.p2pRelayPeers);
     setConfig(c);
+    
+    // Extract relay peer IDs from relay multiaddrs
+    const relayAddrs = await window.bytecave.config.getRelayPeers();
+    const relayIds = relayAddrs.map((addr: string) => {
+      const match = addr.match(/\/p2p\/([^\/]+)$/);
+      return match ? match[1] : null;
+    }).filter((id): id is string => id !== null);
+    setRelayPeerIds(relayIds);
   };
 
   const handleStart = async () => {
@@ -173,7 +245,7 @@ function App() {
         <div className="header-spacer" />
         <div className="logo">
           <img src={bytebatLogo} alt="ByteCave" className="logo-icon" />
-          <span className="logo-text">BYTECAVE</span>
+          <span className="logo-text">BYTENODE</span>
         </div>
         <div className="status-indicator">
           <span className={`status-dot ${status.running ? 'online' : 'offline'}`} />
@@ -192,7 +264,19 @@ function App() {
           className={`tab ${activeTab === 'peers' ? 'active' : ''}`}
           onClick={() => setActiveTab('peers')}
         >
-          Peers ({status.peers ?? status.connectedPeers ?? 0})
+          Peers ({peers.length})
+        </button>
+        <button 
+          className={`tab ${activeTab === 'broadcast' ? 'active' : ''}`}
+          onClick={() => setActiveTab('broadcast')}
+        >
+          Broadcast ({broadcasts.length})
+        </button>
+        <button 
+          className={`tab ${activeTab === 'policy' ? 'active' : ''}`}
+          onClick={() => setActiveTab('policy')}
+        >
+          Policy
         </button>
         <button 
           className={`tab ${activeTab === 'settings' ? 'active' : ''}`}
@@ -226,51 +310,162 @@ function App() {
             </div>
 
             {status.running && (
-              <div className="stats-grid">
-                <div className="stat-card">
-                  <div className="stat-label">HTTP Port</div>
-                  <div className="stat-value">{config?.port || 'N/A'}</div>
+              <>
+                {/* Health Status Banner */}
+                <div className={`health-banner ${status.status || 'healthy'}`}>
+                  <span className="health-icon">{status.status === 'healthy' ? '✓' : status.status === 'degraded' ? '⚠' : '✗'}</span>
+                  <span className="health-text">{(status.status || 'healthy').toUpperCase()}</span>
+                  {status.version && <span className="version-badge">v{status.version}</span>}
                 </div>
-                <div className="stat-card">
-                  <div className="stat-label">Peer ID</div>
-                  <div className="stat-value mono">{status.peerId ? `${status.peerId.slice(0, 16)}...` : 'N/A'}</div>
+
+                {/* Identity Section */}
+                <div className="section-header">Identity</div>
+                <div className="stats-grid">
+                  <div className="stat-card full-width">
+                    <div className="stat-label">Peer ID</div>
+                    <div className="stat-value mono copyable" onClick={() => {
+                      if (status.peerId) {
+                        navigator.clipboard.writeText(status.peerId);
+                        alert('Peer ID copied to clipboard!');
+                      }
+                    }}>
+                      {status.peerId || 'N/A'}
+                    </div>
+                  </div>
+                  <div className="stat-card full-width">
+                    <div className="stat-label">Public Key (for contract registration)</div>
+                    <div className="stat-value mono copyable" onClick={() => {
+                      if (status.publicKey) {
+                        navigator.clipboard.writeText(`0x${status.publicKey}`);
+                        alert('Public key copied to clipboard!');
+                      }
+                    }}>
+                      {status.publicKey ? `0x${status.publicKey}` : 'N/A'}
+                    </div>
+                  </div>
+                  {status.ownerAddress && (
+                    <div className="stat-card full-width">
+                      <div className="stat-label">Owner Address</div>
+                      <div className="stat-value mono">{status.ownerAddress}</div>
+                    </div>
+                  )}
                 </div>
-                <div className="stat-card full-width">
-                  <div className="stat-label">Public Key (for contract registration)</div>
-                  <div className="stat-value mono copyable" onClick={() => {
-                    if (status.publicKey) {
-                      navigator.clipboard.writeText(`0x${status.publicKey}`);
-                      alert('Public key copied to clipboard!');
-                    }
-                  }}>
-                    {status.publicKey ? `0x${status.publicKey.slice(0, 32)}...` : 'N/A'}
+
+                {/* Network Section */}
+                <div className="section-header">Network</div>
+                <div className="stats-grid">
+                  <div className="stat-card">
+                    <div className="stat-label">HTTP Port</div>
+                    <div className="stat-value">{config?.port || 'N/A'}</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-label">Connected Peers</div>
+                    <div className="stat-value">{peers.length}</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-label">Avg Latency</div>
+                    <div className="stat-value">{status.latencyMs ? `${status.latencyMs.toFixed(0)}ms` : 'N/A'}</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-label">Uptime</div>
+                    <div className="stat-value">{formatUptime(status.uptime || 0)}</div>
                   </div>
                 </div>
-                <div className="stat-card">
-                  <div className="stat-label">Connected Peers</div>
-                  <div className="stat-value">{status.peers ?? status.connectedPeers ?? 0}</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-label">Stored Blobs</div>
-                  <div className="stat-value">{status.storedBlobs || 0}</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-label">Storage Used</div>
-                  <div className="stat-value">
-                    {formatBytes(status.totalSize || status.totalStorageUsed || 0)}
+
+                {/* P2P Multiaddrs */}
+                {status.multiaddrs && status.multiaddrs.length > 0 && (
+                  <>
+                    <div className="section-header">P2P Listen Addresses</div>
+                    <div className="multiaddr-list">
+                      {status.multiaddrs.map((addr, i) => (
+                        <div key={i} className="multiaddr-item mono copyable" onClick={() => {
+                          navigator.clipboard.writeText(addr);
+                          alert('Address copied!');
+                        }}>
+                          {addr}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Storage Section */}
+                <div className="section-header">Storage</div>
+                <div className="stats-grid">
+                  <div className="stat-card">
+                    <div className="stat-label">Stored Blobs</div>
+                    <div className="stat-value">{status.storedBlobs || 0}</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-label">Storage Used</div>
+                    <div className="stat-value">
+                      {formatBytes(status.totalSize || status.totalStorageUsed || 0)}
+                    </div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-label">Content Types</div>
+                    <div className="stat-value">
+                      {status.contentTypes === 'all' ? 'ALL' : (status.contentTypes || []).join(', ') || 'ALL'}
+                    </div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-label">Data Directory</div>
+                    <div className="stat-value mono small">{config?.dataDir || 'N/A'}</div>
                   </div>
                 </div>
-                <div className="stat-card">
-                  <div className="stat-label">Uptime</div>
-                  <div className="stat-value">{formatUptime(status.uptime || 0)}</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-label">Content Types</div>
-                  <div className="stat-value">
-                    {status.contentTypes === 'all' ? 'ALL' : (status.contentTypes || []).join(', ')}
-                  </div>
-                </div>
-              </div>
+
+                {/* Integrity Section */}
+                {status.integrity && (
+                  <>
+                    <div className="section-header">Integrity</div>
+                    <div className="stats-grid">
+                      <div className="stat-card">
+                        <div className="stat-label">Checked</div>
+                        <div className="stat-value">{status.integrity.checked}</div>
+                      </div>
+                      <div className="stat-card">
+                        <div className="stat-label">Passed</div>
+                        <div className="stat-value success">{status.integrity.passed}</div>
+                      </div>
+                      <div className="stat-card">
+                        <div className="stat-label">Failed</div>
+                        <div className={`stat-value ${status.integrity.failed > 0 ? 'error' : ''}`}>
+                          {status.integrity.failed}
+                        </div>
+                      </div>
+                      <div className="stat-card">
+                        <div className="stat-label">Orphaned</div>
+                        <div className={`stat-value ${status.integrity.orphaned > 0 ? 'warning' : ''}`}>
+                          {status.integrity.orphaned}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Metrics Section */}
+                {status.metrics && (
+                  <>
+                    <div className="section-header">Performance</div>
+                    <div className="stats-grid">
+                      <div className="stat-card">
+                        <div className="stat-label">Requests (Last Hour)</div>
+                        <div className="stat-value">{status.metrics.requestsLastHour}</div>
+                      </div>
+                      <div className="stat-card">
+                        <div className="stat-label">Avg Response Time</div>
+                        <div className="stat-value">{status.metrics.avgResponseTime.toFixed(0)}ms</div>
+                      </div>
+                      <div className="stat-card">
+                        <div className="stat-label">Success Rate</div>
+                        <div className={`stat-value ${status.metrics.successRate < 0.9 ? 'warning' : 'success'}`}>
+                          {(status.metrics.successRate * 100).toFixed(1)}%
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </>
             )}
 
             {!status.running && (
@@ -284,31 +479,208 @@ function App() {
 
         {activeTab === 'peers' && (
           <div className="peers-panel">
+            {/* Manual Peer Connection */}
+            <div className="connect-peer-section">
+              <div className="section-header">Connect to Peer</div>
+              <p className="connect-hint">
+                Enter a peer's multiaddr to connect directly across any network. 
+                Get this from another node's P2P Listen Addresses.
+              </p>
+              <div className="connect-form">
+                <textarea
+                  value={peerMultiaddr}
+                  onChange={(e) => {
+                    setPeerMultiaddr(e.target.value);
+                    setConnectError(null);
+                  }}
+                  placeholder="/ip4/203.0.113.50/tcp/4001/p2p/12D3KooWExample..."
+                  className="input textarea"
+                  rows={2}
+                  disabled={!status.running || connectingPeer}
+                />
+                <button
+                  className="btn btn-primary"
+                  disabled={!status.running || connectingPeer || !peerMultiaddr.trim()}
+                  onClick={async () => {
+                    setConnectingPeer(true);
+                    setConnectError(null);
+                    try {
+                      const result = await window.bytecave.peer.connect(peerMultiaddr.trim());
+                      if (result.success) {
+                        setPeerMultiaddr('');
+                        loadPeers();
+                        loadStatus();
+                      } else {
+                        setConnectError(result.error || 'Failed to connect');
+                      }
+                    } catch (err: any) {
+                      setConnectError(err.message);
+                    } finally {
+                      setConnectingPeer(false);
+                    }
+                  }}
+                >
+                  {connectingPeer ? 'Connecting...' : 'Connect'}
+                </button>
+              </div>
+              {connectError && (
+                <div className="connect-error">{connectError}</div>
+              )}
+              {!status.running && (
+                <div className="connect-warning">Start your node first to connect to peers</div>
+              )}
+            </div>
+
+            {/* Connected Peers List - backend already filters to connected only */}
+            <div className="section-header">Connected Peers ({peers.length})</div>
             {peers.length === 0 ? (
               <div className="empty-state">
                 <p>No peers connected yet.</p>
-                <p>Peers will appear here as they are discovered on the network.</p>
+                <p>Enter a multiaddr above to connect to a known peer.</p>
               </div>
             ) : (
               <div className="peers-list">
-                {peers.map((peer) => (
-                  <div key={peer.peerId} className="peer-card">
-                    <div className="peer-id mono">{peer.peerId.slice(0, 20)}...</div>
-                    <div className="peer-meta">
-                      <span>Content: {peer.contentTypes === 'all' ? 'ALL' : (peer.contentTypes || []).join(', ')}</span>
-                      <span>Rep: {peer.reputation}</span>
+                {peers.map((peer) => {
+                  // Check if this peer ID matches any configured relay peer
+                  const isRelay = relayPeerIds.includes(peer.peerId);
+                  
+                  return (
+                    <div key={peer.peerId} className={`peer-card ${isRelay ? 'relay-peer' : ''}`}>
+                      <div className="peer-id mono">
+                        {peer.peerId}
+                        {isRelay && <span className="relay-badge">RELAY</span>}
+                      </div>
+                      <div className="peer-meta">
+                        <span>Content: {peer.contentTypes === 'all' ? 'ALL' : (peer.contentTypes || []).join(', ')}</span>
+                        <span>Rep: {peer.reputation}</span>
+                        {peer.httpEndpoint && <span>HTTP: ✓</span>}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
         )}
 
+        {activeTab === 'broadcast' && (
+          <div className="broadcast-panel">
+            <div className="broadcast-send-section">
+              <h3>Send Broadcast Message</h3>
+              <textarea
+                className="broadcast-input"
+                placeholder="Type your message here..."
+                value={broadcastMessage}
+                onChange={(e) => setBroadcastMessage(e.target.value)}
+                maxLength={1000}
+                rows={4}
+              />
+              <div className="broadcast-actions">
+                <button 
+                  className="btn-primary"
+                  onClick={async () => {
+                    if (!broadcastMessage.trim()) return;
+                    if (!config?.port) {
+                      console.error('No port configured');
+                      return;
+                    }
+                    try {
+                      console.log(`Sending broadcast to http://localhost:${config.port}/broadcast`);
+                      const response = await fetch(`http://localhost:${config.port}/broadcast`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: broadcastMessage })
+                      });
+                      console.log('Broadcast response:', response.status, response.statusText);
+                      if (response.ok) {
+                        setBroadcastMessage('');
+                        loadBroadcasts();
+                      } else {
+                        const errorText = await response.text();
+                        console.error('Broadcast failed:', response.status, errorText);
+                      }
+                    } catch (error) {
+                      console.error('Failed to send broadcast:', error);
+                    }
+                  }}
+                  disabled={!status.running || !broadcastMessage.trim()}
+                >
+                  Send to All Peers
+                </button>
+                <span className="char-count">{broadcastMessage.length}/1000</span>
+              </div>
+            </div>
+
+            <div className="broadcast-list-section">
+              <h3>Recent Broadcasts</h3>
+              {broadcasts.length === 0 ? (
+                <div className="empty-state">
+                  <p>No broadcasts yet</p>
+                  <p>Send a message to see it here</p>
+                </div>
+              ) : (
+                <div className="broadcasts-list">
+                  {broadcasts.map((broadcast, index) => (
+                    <div key={index} className="broadcast-card">
+                      <div className="broadcast-header">
+                        <span className="broadcast-from mono">{broadcast.from.slice(0, 16)}...</span>
+                        <span className="broadcast-time">
+                          {new Date(broadcast.timestamp).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      <div className="broadcast-message">{broadcast.message}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'policy' && config && (
+          <NodePolicyTab 
+            config={config}
+            onConfigChange={(newConfig) => {
+              setConfig(newConfig);
+              window.bytecave.config.set(newConfig);
+            }}
+          />
+        )}
+
         {activeTab === 'settings' && config && (
           <div className="settings-panel">
             <div className="setting-group">
-              <label>Owner Wallet Address (for contract registration)</label>
+              <label>Node ID</label>
+              <input 
+                type="text" 
+                value={config.nodeId} 
+                onChange={(e) => setConfig({ ...config, nodeId: e.target.value })}
+                className="input"
+              />
+              <small className="setting-hint">Unique identifier for this node</small>
+            </div>
+            <div className="setting-group">
+              <label>Data Directory</label>
+              <input 
+                type="text" 
+                value={config.dataDir} 
+                onChange={(e) => setConfig({ ...config, dataDir: e.target.value })}
+                className="input"
+              />
+              <small className="setting-hint">Where node data is stored</small>
+            </div>
+            <div className="setting-group">
+              <label>HTTP Port</label>
+              <input 
+                type="number" 
+                value={config.port} 
+                onChange={(e) => setConfig({ ...config, port: parseInt(e.target.value) })}
+                className="input"
+              />
+              <small className="setting-hint">Port for HTTP API</small>
+            </div>
+            <div className="setting-group">
+              <label>Owner Wallet Address</label>
               <input 
                 type="text" 
                 value={config.ownerAddress || ''} 
@@ -316,11 +688,50 @@ function App() {
                 placeholder="0x..."
                 className="input"
               />
-              <small className="setting-hint">Your Ethereum address that will own this node on-chain</small>
+              <small className="setting-hint">Your Ethereum address for on-chain registration</small>
             </div>
             <div className="setting-group">
-              <label>Data Directory</label>
-              <input type="text" value={config.dataDir} readOnly className="input" />
+              <label>Public Key</label>
+              <input 
+                type="text" 
+                value={config.publicKey || ''} 
+                readOnly
+                placeholder="Generated automatically on first start..."
+                className="input"
+              />
+              <small className="setting-hint">Node's public key (auto-generated on first start)</small>
+            </div>
+            <div className="setting-group">
+              <label>Relay Nodes (for NAT traversal)</label>
+              <textarea 
+                value={(config.p2pRelayPeers || []).join('\n')} 
+                onChange={(e) => setConfig({ 
+                  ...config, 
+                  p2pRelayPeers: e.target.value.split('\n').filter(p => p.trim()) 
+                })}
+                placeholder="/ip4/1.2.3.4/tcp/4001/p2p/12D3KooW..."
+                className="input textarea"
+                rows={3}
+              />
+              <small className="setting-hint">
+                Enter relay node multiaddrs (one per line). Relays help nodes behind NATs/firewalls connect to each other.
+              </small>
+            </div>
+            <div className="setting-group">
+              <label>Bootstrap Peers (for cross-network discovery)</label>
+              <textarea 
+                value={(config.p2pBootstrapPeers || []).join('\n')} 
+                onChange={(e) => setConfig({ 
+                  ...config, 
+                  p2pBootstrapPeers: e.target.value.split('\n').filter(p => p.trim()) 
+                })}
+                placeholder="/ip4/1.2.3.4/tcp/4001/p2p/12D3KooW..."
+                className="input textarea"
+                rows={3}
+              />
+              <small className="setting-hint">
+                Enter multiaddrs of known peers (one per line). These help your node discover others across networks.
+              </small>
             </div>
             <div className="setting-group">
               <label>Max Storage (MB)</label>
@@ -331,51 +742,12 @@ function App() {
                 className="input"
               />
             </div>
-            <div className="setting-group">
-              <label>HTTP Port</label>
-              <input 
-                type="number" 
-                value={config.httpPort} 
-                onChange={(e) => setConfig({ ...config, httpPort: parseInt(e.target.value) })}
-                className="input"
-              />
-            </div>
-            <div className="setting-group">
-              <label>Content Types</label>
-              <select 
-                value={config.contentTypes === 'all' ? 'all' : 'custom'}
-                onChange={(e) => setConfig({ 
-                  ...config, 
-                  contentTypes: e.target.value === 'all' ? 'all' : ['messages', 'posts'] 
-                })}
-                className="input"
-              >
-                <option value="all">All Content Types</option>
-                <option value="custom">Custom Selection</option>
-              </select>
-            </div>
             <div className="setting-group checkboxes">
               <label>
                 <input 
                   type="checkbox" 
-                  checked={config.enableDHT}
-                  onChange={(e) => setConfig({ ...config, enableDHT: e.target.checked })}
-                />
-                Enable DHT (Distributed Hash Table)
-              </label>
-              <label>
-                <input 
-                  type="checkbox" 
-                  checked={config.enableMDNS}
-                  onChange={(e) => setConfig({ ...config, enableMDNS: e.target.checked })}
-                />
-                Enable mDNS (Local Discovery)
-              </label>
-              <label>
-                <input 
-                  type="checkbox" 
-                  checked={config.enableRelay}
-                  onChange={(e) => setConfig({ ...config, enableRelay: e.target.checked })}
+                  checked={config.p2pEnableRelay}
+                  onChange={(e) => setConfig({ ...config, p2pEnableRelay: e.target.checked })}
                 />
                 Enable Relay (NAT Traversal)
               </label>
