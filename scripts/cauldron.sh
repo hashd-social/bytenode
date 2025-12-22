@@ -20,6 +20,12 @@ PROJECT_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
 mkdir -p "$PROJECT_DIR/test-data/bat-1"
 mkdir -p "$PROJECT_DIR/test-data/bat-2"
 mkdir -p "$PROJECT_DIR/test-data/bat-3"
+mkdir -p "$PROJECT_DIR/test-data/logs"
+
+# Clear old logs
+rm -f "$PROJECT_DIR/test-data/logs/bat-alpha.log"
+rm -f "$PROJECT_DIR/test-data/logs/bat-beta.log"
+rm -f "$PROJECT_DIR/test-data/logs/bat-gamma.log"
 
 # Build first if needed
 if [ ! -f "$PROJECT_DIR/dist/renderer/index.html" ]; then
@@ -36,8 +42,8 @@ echo ""
 # Path to local electron
 ELECTRON="$PROJECT_DIR/node_modules/.bin/electron"
 
-# Relay peer address (Docker relay on host network)
-RELAY_PEER="/ip4/172.18.0.2/tcp/4001/p2p/12D3KooWDUsTtqKh7VcnydpAe5G8SwiMKYramFny6caML58zbg9Y"
+# Relay peer address (localhost - Docker port mapping)
+RELAY_PEER="/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWDUsTtqKh7VcnydpAe5G8SwiMKYramFny6caML58zbg9Y"
 
 # Launch Instance 1 (Bat Alpha) - Port 5001, P2P 5011-5012
 echo -e "${CYAN}🦇 Launching Bat Alpha (port 5001)...${NC}"
@@ -45,7 +51,7 @@ BYTENODE_PORT=5001 \
 BYTENODE_NODE_ID=bat-alpha \
 BYTENODE_P2P_PORTS="5011,5012" \
 BYTENODE_RELAY_PEERS="$RELAY_PEER" \
-"$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-1" &
+"$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-1" > "$PROJECT_DIR/test-data/logs/bat-alpha.log" 2>&1 &
 PID1=$!
 sleep 2
 
@@ -55,7 +61,7 @@ BYTENODE_PORT=5002 \
 BYTENODE_NODE_ID=bat-beta \
 BYTENODE_P2P_PORTS="5021,5022" \
 BYTENODE_RELAY_PEERS="$RELAY_PEER" \
-"$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-2" &
+"$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-2" > "$PROJECT_DIR/test-data/logs/bat-beta.log" 2>&1 &
 PID2=$!
 sleep 2
 
@@ -65,13 +71,18 @@ BYTENODE_PORT=5003 \
 BYTENODE_NODE_ID=bat-gamma \
 BYTENODE_P2P_PORTS="5031,5032" \
 BYTENODE_RELAY_PEERS="$RELAY_PEER" \
-"$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-3" &
+"$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-3" > "$PROJECT_DIR/test-data/logs/bat-gamma.log" 2>&1 &
 PID3=$!
 
 echo ""
 echo "  Bat Alpha: PID $PID1 (HTTP 5001, P2P 5011/5012)"
 echo "  Bat Beta:  PID $PID2 (HTTP 5002, P2P 5021/5022)"
 echo "  Bat Gamma: PID $PID3 (HTTP 5003, P2P 5031/5032)"
+echo ""
+echo "  Logs saved to: test-data/logs/"
+echo "    - bat-alpha.log"
+echo "    - bat-beta.log"
+echo "    - bat-gamma.log"
 echo ""
 echo "  Stop all: yarn cauldron:stop"
 echo ""
