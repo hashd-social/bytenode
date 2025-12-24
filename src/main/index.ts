@@ -278,23 +278,36 @@ async function startNode(): Promise<void> {
  */
 async function stopNode(): Promise<void> {
   if (!nodeProcess) {
+    console.log('[stopNode] No node process to stop');
     return;
   }
 
+  console.log('[stopNode] Stopping node process...');
+
   return new Promise((resolve) => {
-    nodeProcess!.on('exit', () => {
+    const exitHandler = () => {
+      console.log('[stopNode] Node process exited');
       nodeProcess = null;
       nodeRunning = false;
       mainWindow?.webContents.send('node:stopped');
-      resolve();
-    });
+      
+      // Wait a bit for ports to be released before resolving
+      setTimeout(() => {
+        console.log('[stopNode] Ports should be released now');
+        resolve();
+      }, 1000);
+    };
+
+    nodeProcess!.once('exit', exitHandler);
 
     // Send SIGTERM for graceful shutdown
+    console.log('[stopNode] Sending SIGTERM');
     nodeProcess!.kill('SIGTERM');
 
     // Force kill after 5 seconds
     setTimeout(() => {
       if (nodeProcess) {
+        console.log('[stopNode] Process still running, sending SIGKILL');
         nodeProcess.kill('SIGKILL');
       }
     }, 5000);

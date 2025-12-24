@@ -43,7 +43,37 @@ echo ""
 ELECTRON="$PROJECT_DIR/node_modules/.bin/electron"
 
 # Relay peer address (localhost - Docker port mapping)
-RELAY_PEER="/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWDUsTtqKh7VcnydpAe5G8SwiMKYramFny6caML58zbg9Y"
+# Preferably set by environment variable from start-all.sh
+# If not set, try to get from running Docker container, or use localhost default
+if [ -z "$RELAY_PEER" ]; then
+    echo "⚠️  RELAY_PEER not set, attempting to detect from Docker..."
+    
+    # Try to get peer ID from running bytecave-relay container
+    if docker ps | grep -q bytecave-relay; then
+        RELAY_PEER_ID=$(docker logs bytecave-relay 2>&1 | grep -o "Peer ID: [a-zA-Z0-9]*" | head -1 | cut -d' ' -f3)
+        if [ ! -z "$RELAY_PEER_ID" ]; then
+            RELAY_PEER="/ip4/127.0.0.1/tcp/4001/p2p/$RELAY_PEER_ID"
+            echo "✓ Detected relay: $RELAY_PEER"
+        else
+            echo "⚠️  Could not detect relay peer ID"
+            echo "   Make sure bytecave-relay Docker container is running"
+            echo "   Run: docker logs bytecave-relay"
+            exit 1
+        fi
+    else
+        echo "ERROR: bytecave-relay Docker container not running"
+        echo "Start it with: ./start-all.sh or manually start the relay"
+        exit 1
+    fi
+fi
+
+# Contract addresses from hardhat deployment
+# TODO: Update these after running hardhat deploy scripts
+RPC_URL="${RPC_URL:-http://localhost:8545}"
+VAULT_REGISTRY_ADDRESS="${VAULT_REGISTRY_ADDRESS:-}"
+MESSAGE_STORAGE_ADDRESS="${MESSAGE_STORAGE_ADDRESS:-}"
+POST_STORAGE_ADDRESS="${POST_STORAGE_ADDRESS:-}"
+GROUP_FACTORY_ADDRESS="${GROUP_FACTORY_ADDRESS:-}"
 
 # Launch Instance 1 (Bat Alpha) - Port 5001, P2P 5011-5012
 echo -e "${CYAN}🦇 Launching Bat Alpha (port 5001)...${NC}"
@@ -51,6 +81,11 @@ BYTENODE_PORT=5001 \
 BYTENODE_NODE_ID=bat-alpha \
 BYTENODE_P2P_PORTS="5011,5012" \
 BYTENODE_RELAY_PEERS="$RELAY_PEER" \
+RPC_URL="$RPC_URL" \
+VAULT_REGISTRY_ADDRESS="$VAULT_REGISTRY_ADDRESS" \
+MESSAGE_STORAGE_ADDRESS="$MESSAGE_STORAGE_ADDRESS" \
+POST_STORAGE_ADDRESS="$POST_STORAGE_ADDRESS" \
+GROUP_FACTORY_ADDRESS="$GROUP_FACTORY_ADDRESS" \
 "$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-1" > "$PROJECT_DIR/test-data/logs/bat-alpha.log" 2>&1 &
 PID1=$!
 sleep 2
@@ -61,6 +96,11 @@ BYTENODE_PORT=5002 \
 BYTENODE_NODE_ID=bat-beta \
 BYTENODE_P2P_PORTS="5021,5022" \
 BYTENODE_RELAY_PEERS="$RELAY_PEER" \
+RPC_URL="$RPC_URL" \
+VAULT_REGISTRY_ADDRESS="$VAULT_REGISTRY_ADDRESS" \
+MESSAGE_STORAGE_ADDRESS="$MESSAGE_STORAGE_ADDRESS" \
+POST_STORAGE_ADDRESS="$POST_STORAGE_ADDRESS" \
+GROUP_FACTORY_ADDRESS="$GROUP_FACTORY_ADDRESS" \
 "$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-2" > "$PROJECT_DIR/test-data/logs/bat-beta.log" 2>&1 &
 PID2=$!
 sleep 2
@@ -71,6 +111,11 @@ BYTENODE_PORT=5003 \
 BYTENODE_NODE_ID=bat-gamma \
 BYTENODE_P2P_PORTS="5031,5032" \
 BYTENODE_RELAY_PEERS="$RELAY_PEER" \
+RPC_URL="$RPC_URL" \
+VAULT_REGISTRY_ADDRESS="$VAULT_REGISTRY_ADDRESS" \
+MESSAGE_STORAGE_ADDRESS="$MESSAGE_STORAGE_ADDRESS" \
+POST_STORAGE_ADDRESS="$POST_STORAGE_ADDRESS" \
+GROUP_FACTORY_ADDRESS="$GROUP_FACTORY_ADDRESS" \
 "$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-3" > "$PROJECT_DIR/test-data/logs/bat-gamma.log" 2>&1 &
 PID3=$!
 
