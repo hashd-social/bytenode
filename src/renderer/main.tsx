@@ -731,7 +731,14 @@ function App() {
               </small>
             </div>
             <div className="setting-group">
-              <label>Bootstrap Peers (for cross-network discovery)</label>
+              <label>
+                Bootstrap Peers (for cross-network discovery)
+                {config.p2pBootstrapPeers && config.p2pBootstrapPeers.length > 0 && (
+                  <span style={{ marginLeft: '8px', fontSize: '12px', color: '#4ade80' }}>
+                    ✓ {config.p2pBootstrapPeers.length} peer{config.p2pBootstrapPeers.length !== 1 ? 's' : ''} saved
+                  </span>
+                )}
+              </label>
               <textarea 
                 value={(config.p2pBootstrapPeers || []).join('\n')} 
                 onChange={(e) => setConfig({ 
@@ -740,10 +747,12 @@ function App() {
                 })}
                 placeholder="/ip4/1.2.3.4/tcp/4001/p2p/12D3KooW..."
                 className="input textarea"
-                rows={3}
+                rows={5}
               />
               <small className="setting-hint">
-                Enter multiaddrs of known peers (one per line). These help your node discover others across networks.
+                ✨ Discovered peers are automatically saved here. You can also manually add known peers (one per line).
+                <br />
+                These peers are persisted in <code>data/config.json</code> and used for reconnection on restart.
               </small>
             </div>
             <div className="setting-group">
@@ -769,6 +778,8 @@ function App() {
               className="btn btn-primary"
               onClick={async () => {
                 await window.bytecave.config.set(config);
+                // Reload config to show updated values from config.json
+                await loadConfig();
                 alert('Settings saved! Restart the node for changes to take effect.');
               }}
             >

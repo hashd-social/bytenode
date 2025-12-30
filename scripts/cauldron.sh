@@ -49,15 +49,16 @@ if [ -z "$RELAY_PEER" ]; then
     echo "⚠️  RELAY_PEER not set, attempting to detect from Docker..."
     
     # Try to get peer ID from running bytecave-relay container
-    if docker ps | grep -q bytecave-relay; then
-        RELAY_PEER_ID=$(docker logs bytecave-relay 2>&1 | grep -o "Peer ID: [a-zA-Z0-9]*" | head -1 | cut -d' ' -f3)
+    RELAY_CONTAINER=$(docker ps --format '{{.Names}}' | grep bytecave-relay | head -1)
+    if [ ! -z "$RELAY_CONTAINER" ]; then
+        RELAY_PEER_ID=$(docker logs "$RELAY_CONTAINER" 2>&1 | grep "Peer ID:" | head -1 | awk '{print $NF}')
         if [ ! -z "$RELAY_PEER_ID" ]; then
             RELAY_PEER="/ip4/127.0.0.1/tcp/4001/p2p/$RELAY_PEER_ID"
             echo "✓ Detected relay: $RELAY_PEER"
         else
             echo "⚠️  Could not detect relay peer ID"
             echo "   Make sure bytecave-relay Docker container is running"
-            echo "   Run: docker logs bytecave-relay"
+            echo "   Run: docker logs $RELAY_CONTAINER"
             exit 1
         fi
     else

@@ -7,6 +7,7 @@ import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron';
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as os from 'os';
+import * as fs from 'fs';
 import Store from 'electron-store';
 
 interface ShardRange {
@@ -42,10 +43,13 @@ let nodeRunning = false;
 // Get config from environment (for multi-instance testing) or use defaults
 const envPort = process.env.BYTENODE_PORT ? parseInt(process.env.BYTENODE_PORT) : 5001;
 const envNodeId = process.env.BYTENODE_NODE_ID || `bytecave-${Date.now()}`;
-const envDataDir = process.env.BYTENODE_DATA_DIR || path.join(os.homedir(), '.bytecave');
+const envBaseDataDir = process.env.BYTENODE_DATA_DIR || path.join(os.homedir(), '.bytecave');
 const envP2pPorts = process.env.BYTENODE_P2P_PORTS?.split(',') || ['4001', '4002'];
 const envRelayPeers = process.env.BYTENODE_RELAY_PEERS?.split(',') || [];
 const envBootstrapPeers = process.env.BYTENODE_BOOTSTRAP_PEERS?.split(',') || [];
+
+// Create data directory with nodeId subfolder: e.g., ~/.bytecave/bat-alpha
+const envDataDir = path.join(envBaseDataDir, envNodeId);
 
 // Default config
 const defaultConfig: NodeConfig = {
@@ -77,10 +81,41 @@ function getConfig(): NodeConfig {
   }
   
   // Normal mode: merge stored config with defaults
-  return {
+  const storedConfig = store.get('nodeConfig', {}) as Partial<NodeConfig>;
+  let mergedConfig = {
     ...defaultConfig,
-    ...store.get('nodeConfig', {}) as Partial<NodeConfig>
+    ...storedConfig
   };
+  
+  // Ensure dataDir includes nodeId subfolder
+  // If user changed dataDir, append nodeId; if it already has nodeId, keep it
+  const baseDataDir = mergedConfig.dataDir.includes(mergedConfig.nodeId) 
+    ? mergedConfig.dataDir 
+    : path.join(mergedConfig.dataDir, mergedConfig.nodeId);
+  mergedConfig.dataDir = baseDataDir;
+  
+  // Also load P2P settings from bytecave-core's config.json if it exists
+  try {
+    const configJsonPath = path.join(mergedConfig.dataDir, 'config.json');
+    if (fs.existsSync(configJsonPath)) {
+      const data = fs.readFileSync(configJsonPath, 'utf8');
+      const persistedConfig = JSON.parse(data);
+      
+      // Merge P2P settings from config.json (they take precedence over electron-store)
+      if (persistedConfig.p2pBootstrapPeers) {
+        mergedConfig.p2pBootstrapPeers = persistedConfig.p2pBootstrapPeers;
+      }
+      if (persistedConfig.p2pRelayPeers) {
+        mergedConfig.p2pRelayPeers = persistedConfig.p2pRelayPeers;
+      }
+      
+      console.log('[Config] Loaded P2P settings from config.json');
+    }
+  } catch (error) {
+    console.warn('[Config] Failed to load config.json:', error);
+  }
+  
+  return mergedConfig;
 }
 
 function createWindow(): void {
@@ -381,8 +416,46 @@ ipcMain.handle('config:getRelayPeers', () => {
   return config.p2pRelayPeers || [];
 });
 
-ipcMain.handle('config:set', (_event, newConfig: Partial<NodeConfig>) => {
+ipcMain.handle('config:set', async (_event, newConfig: Partial<NodeConfig>) => {
+  // Save to electron-store for desktop-specific settings
   store.set('nodeConfig', { ...getConfig(), ...newConfig });
+  
+  // Also save P2P settings to bytecave-core's config.json
+  if (newConfig.p2pBootstrapPeers || newConfig.p2pRelayPeers) {
+    try {
+      const config = getConfig();
+      const configJsonPath = path.join(config.dataDir, 'config.json');
+      const fs = await import('fs/promises');
+      
+      let persistedConfig: any = {};
+      try {
+        const data = await fs.readFile(configJsonPath, 'utf8');
+        persistedConfig = JSON.parse(data);
+      } catch (err) {
+        // File doesn't exist yet, will create it
+      }
+      
+      // Update P2P settings
+      if (newConfig.p2pBootstrapPeers !== undefined) {
+        persistedConfig.p2pBootstrapPeers = newConfig.p2pBootstrapPeers;
+      }
+      if (newConfig.p2pRelayPeers !== undefined) {
+        persistedConfig.p2pRelayPeers = newConfig.p2pRelayPeers;
+      }
+      
+      persistedConfig.lastUpdated = Date.now();
+      
+      // Ensure directory exists
+      await fs.mkdir(path.dirname(configJsonPath), { recursive: true });
+      
+      // Write config.json
+      await fs.writeFile(configJsonPath, JSON.stringify(persistedConfig, null, 2), 'utf8');
+      console.log('[Config] Saved P2P settings to config.json');
+    } catch (error) {
+      console.error('[Config] Failed to save to config.json:', error);
+    }
+  }
+  
   return { success: true };
 });
 
