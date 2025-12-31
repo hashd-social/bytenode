@@ -16,9 +16,17 @@ interface ShardRange {
 }
 
 interface NodeConfig {
+  // Node Configuration
   nodeId: string;
   dataDir: string;
   port: number;
+  nodeUrl?: string;
+  
+  // Identity
+  ownerAddress?: string;
+  publicKey?: string;
+  
+  // P2P Configuration
   p2pEnabled: boolean;
   p2pListenAddresses: string[];
   p2pBootstrapPeers: string[];
@@ -26,12 +34,44 @@ interface NodeConfig {
   p2pEnableRelay: boolean;
   p2pEnableDHT: boolean;
   p2pEnableMDNS: boolean;
-  maxStorageMB: number;
+  
+  // Sharding
   shardCount: number;
   nodeShards: ShardRange[];
-  ownerAddress?: string;
-  publicKey?: string;
-  contentTypes?: string; // 'all' or 'messages,posts,media,listings'
+  
+  // Garbage Collection
+  gcEnabled?: boolean;
+  gcRetentionMode?: 'size' | 'time' | 'hybrid';
+  gcMaxStorageMB?: number;
+  gcMaxBlobAgeDays?: number;
+  gcMinFreeDiskMB?: number;
+  gcReservedForPinnedMB?: number;
+  gcIntervalMinutes?: number;
+  gcVerifyReplicas?: boolean;
+  gcVerifyProofs?: boolean;
+  
+  // Storage Configuration
+  maxStorageMB: number;
+  maxBlobSizeMB?: number;
+  maxStorageGB?: number;
+  
+  // Replication Configuration
+  replicationEnabled?: boolean;
+  replicationTimeoutMs?: number;
+  replicationFactor?: number;
+  
+  // Security
+  enableBlockedContent?: boolean;
+  allowedApps?: string[];
+  requireAppRegistry?: boolean;
+  
+  // Performance
+  cacheSizeMB?: number;
+  compressionEnabled?: boolean;
+  
+  // Monitoring
+  metricsEnabled?: boolean;
+  logLevel?: string;
 }
 
 const store = new Store();
@@ -42,8 +82,8 @@ let nodeRunning = false;
 
 // Get config from environment (for multi-instance testing) or use defaults
 const envPort = process.env.BYTENODE_PORT ? parseInt(process.env.BYTENODE_PORT) : 5001;
-const envNodeId = process.env.BYTENODE_NODE_ID || `bytecave-${Date.now()}`;
-const envP2pPorts = process.env.BYTENODE_P2P_PORTS?.split(',') || ['4001', '4002'];
+const envNodeId = process.env.BYTENODE_NODE_ID || 'bat-alpha'; // Default to bat-alpha for normal desktop app usage
+const envP2pPorts = process.env.BYTENODE_P2P_PORTS?.split(',') || ['5011', '5012'];
 const envRelayPeers = process.env.BYTENODE_RELAY_PEERS?.split(',') || [];
 const envBootstrapPeers = process.env.BYTENODE_BOOTSTRAP_PEERS?.split(',') || [];
 
@@ -74,54 +114,53 @@ const defaultConfig: NodeConfig = {
 };
 
 function getConfig(): NodeConfig {
-  // In multi-instance mode, prioritize environment variables over stored config
-  const isMultiInstance = !!process.env.BYTENODE_PORT;
-  
-  if (isMultiInstance) {
-    // Use environment variables directly, don't merge with stored config
-    return defaultConfig;
-  }
-  
-  // Normal mode: merge stored config with defaults
-  const storedConfig = store.get('nodeConfig', {}) as Partial<NodeConfig>;
-  let mergedConfig = {
-    ...defaultConfig,
-    ...storedConfig
-  };
+  // Start with defaults from environment
+  let config = { ...defaultConfig };
+  console.log('[Config] Starting with defaults - dataDir:', config.dataDir, 'maxStorageMB:', config.maxStorageMB);
   
   // Ensure dataDir includes nodeId subfolder
-  // Check if the last path component is the nodeId to avoid double-nesting
-  const pathParts = mergedConfig.dataDir.split(path.sep);
+  const pathParts = config.dataDir.split(path.sep);
   const lastPart = pathParts[pathParts.length - 1];
-  const baseDataDir = lastPart === mergedConfig.nodeId
-    ? mergedConfig.dataDir 
-    : path.join(mergedConfig.dataDir, mergedConfig.nodeId);
-  mergedConfig.dataDir = baseDataDir;
+  const baseDataDir = lastPart === config.nodeId
+    ? config.dataDir 
+    : path.join(config.dataDir, config.nodeId);
+  config.dataDir = baseDataDir;
+  console.log('[Config] After path adjustment - dataDir:', config.dataDir);
   
-  // Also load ALL settings from bytecave-core's config.json if it exists
+  // ALWAYS load from config.json if it exists (single source of truth)
+  // This applies to both normal mode and multi-instance mode
   try {
-    const configJsonPath = path.join(mergedConfig.dataDir, 'config.json');
+    const configJsonPath = path.join(config.dataDir, 'config.json');
+    console.log('[Config] Looking for config.json at:', configJsonPath);
+    console.log('[Config] File exists?', fs.existsSync(configJsonPath));
+    
     if (fs.existsSync(configJsonPath)) {
       const data = fs.readFileSync(configJsonPath, 'utf8');
       const persistedConfig = JSON.parse(data);
       
-      // Merge ALL settings from config.json (they take precedence over electron-store)
-      if (persistedConfig.p2pBootstrapPeers) mergedConfig.p2pBootstrapPeers = persistedConfig.p2pBootstrapPeers;
-      if (persistedConfig.p2pRelayPeers) mergedConfig.p2pRelayPeers = persistedConfig.p2pRelayPeers;
-      if (persistedConfig.ownerAddress) mergedConfig.ownerAddress = persistedConfig.ownerAddress;
-      if (persistedConfig.publicKey) mergedConfig.publicKey = persistedConfig.publicKey;
-      if (persistedConfig.contentTypes) mergedConfig.contentTypes = persistedConfig.contentTypes;
-      if (persistedConfig.maxStorageMB) mergedConfig.maxStorageMB = persistedConfig.maxStorageMB;
-      if (persistedConfig.port) mergedConfig.port = persistedConfig.port;
-      if (persistedConfig.nodeId) mergedConfig.nodeId = persistedConfig.nodeId;
+      console.log('[Config] Found config.json with maxStorageMB:', persistedConfig.maxStorageMB);
+      console.log('[Config] Found config.json with bootstrap peers:', persistedConfig.p2pBootstrapPeers?.length || 0);
       
-      console.log('[Config] Loaded all settings from config.json');
+      // Replace ALL settings from config.json (it's the source of truth)
+      const beforeMerge = config.maxStorageMB;
+      config = {
+        ...config,
+        ...persistedConfig,
+        // Ensure these critical paths stay correct
+        dataDir: config.dataDir
+      };
+      console.log('[Config] After merge - maxStorageMB changed from', beforeMerge, 'to', config.maxStorageMB);
+      
+      console.log('[Config] Final config - bootstrap peers:', config.p2pBootstrapPeers?.length || 0, 'maxStorageMB:', config.maxStorageMB);
+    } else {
+      console.log('[Config] config.json does not exist at', configJsonPath);
     }
   } catch (error) {
     console.warn('[Config] Failed to load config.json:', error);
   }
   
-  return mergedConfig;
+  console.log('[Config] Returning config with maxStorageMB:', config.maxStorageMB);
+  return config;
 }
 
 function createWindow(): void {
@@ -230,8 +269,7 @@ async function startNode(): Promise<void> {
     SHARD_COUNT: String(config.shardCount),
     NODE_SHARDS: JSON.stringify(config.nodeShards),
     OWNER_ADDRESS: config.ownerAddress || '',
-    PUBLIC_KEY: config.publicKey || '',
-    CONTENT_TYPES: config.contentTypes || 'all'
+    PUBLIC_KEY: config.publicKey || ''
   };
 
   console.log(`Starting bytecave-core from: ${corePath}`);
@@ -422,7 +460,10 @@ ipcMain.handle('node:peers', async () => {
 });
 
 ipcMain.handle('config:get', () => {
-  return getConfig();
+  // getConfig() already reads from config.json as the source of truth
+  const config = getConfig();
+  console.log('[IPC] config:get - bootstrap peers:', config.p2pBootstrapPeers?.length || 0, 'maxStorageMB:', config.maxStorageMB);
+  return config;
 });
 
 ipcMain.handle('config:getRelayPeers', () => {
@@ -431,45 +472,83 @@ ipcMain.handle('config:getRelayPeers', () => {
 });
 
 ipcMain.handle('config:set', async (_event, newConfig: Partial<NodeConfig>) => {
-  // Save to electron-store for desktop-specific settings
-  store.set('nodeConfig', { ...getConfig(), ...newConfig });
+  console.log('[IPC] config:set called with:', { maxStorageMB: newConfig.maxStorageMB, port: newConfig.port });
   
-  // Also save ALL settings to bytecave-core's config.json
   try {
     const config = getConfig();
     const configJsonPath = path.join(config.dataDir, 'config.json');
+    console.log('[IPC] Will save to:', configJsonPath);
+    
     const fs = await import('fs/promises');
     
     let persistedConfig: any = {};
     try {
       const data = await fs.readFile(configJsonPath, 'utf8');
       persistedConfig = JSON.parse(data);
+      console.log('[IPC] Read existing config, maxStorageMB:', persistedConfig.maxStorageMB);
     } catch (err) {
-      // File doesn't exist yet, will create it
+      console.log('[IPC] No existing config, creating new');
     }
     
     // Update ALL settings that were changed
     if (newConfig.nodeId !== undefined) persistedConfig.nodeId = newConfig.nodeId;
     if (newConfig.port !== undefined) persistedConfig.port = newConfig.port;
-    if (newConfig.maxStorageMB !== undefined) persistedConfig.maxStorageMB = newConfig.maxStorageMB;
+    if (newConfig.maxStorageMB !== undefined) {
+      console.log('[IPC] Updating maxStorageMB from', persistedConfig.maxStorageMB, 'to', newConfig.maxStorageMB);
+      persistedConfig.maxStorageMB = newConfig.maxStorageMB;
+    }
     if (newConfig.p2pBootstrapPeers !== undefined) persistedConfig.p2pBootstrapPeers = newConfig.p2pBootstrapPeers;
     if (newConfig.p2pRelayPeers !== undefined) persistedConfig.p2pRelayPeers = newConfig.p2pRelayPeers;
     if (newConfig.shardCount !== undefined) persistedConfig.shardCount = newConfig.shardCount;
     if (newConfig.nodeShards !== undefined) persistedConfig.nodeShards = newConfig.nodeShards;
     if (newConfig.ownerAddress !== undefined) persistedConfig.ownerAddress = newConfig.ownerAddress;
     if (newConfig.publicKey !== undefined) persistedConfig.publicKey = newConfig.publicKey;
-    if (newConfig.contentTypes !== undefined) persistedConfig.contentTypes = newConfig.contentTypes;
+    
+    // Garbage Collection
+    if (newConfig.gcEnabled !== undefined) persistedConfig.gcEnabled = newConfig.gcEnabled;
+    if (newConfig.gcRetentionMode !== undefined) persistedConfig.gcRetentionMode = newConfig.gcRetentionMode;
+    if (newConfig.gcMaxStorageMB !== undefined) persistedConfig.gcMaxStorageMB = newConfig.gcMaxStorageMB;
+    if (newConfig.gcMaxBlobAgeDays !== undefined) persistedConfig.gcMaxBlobAgeDays = newConfig.gcMaxBlobAgeDays;
+    if (newConfig.gcMinFreeDiskMB !== undefined) persistedConfig.gcMinFreeDiskMB = newConfig.gcMinFreeDiskMB;
+    if (newConfig.gcReservedForPinnedMB !== undefined) persistedConfig.gcReservedForPinnedMB = newConfig.gcReservedForPinnedMB;
+    if (newConfig.gcIntervalMinutes !== undefined) persistedConfig.gcIntervalMinutes = newConfig.gcIntervalMinutes;
+    if (newConfig.gcVerifyReplicas !== undefined) persistedConfig.gcVerifyReplicas = newConfig.gcVerifyReplicas;
+    if (newConfig.gcVerifyProofs !== undefined) persistedConfig.gcVerifyProofs = newConfig.gcVerifyProofs;
+    
+    // Storage
+    if (newConfig.maxBlobSizeMB !== undefined) persistedConfig.maxBlobSizeMB = newConfig.maxBlobSizeMB;
+    if (newConfig.maxStorageGB !== undefined) persistedConfig.maxStorageGB = newConfig.maxStorageGB;
+    
+    // Replication
+    if (newConfig.replicationEnabled !== undefined) persistedConfig.replicationEnabled = newConfig.replicationEnabled;
+    if (newConfig.replicationTimeoutMs !== undefined) persistedConfig.replicationTimeoutMs = newConfig.replicationTimeoutMs;
+    if (newConfig.replicationFactor !== undefined) persistedConfig.replicationFactor = newConfig.replicationFactor;
+    
+    // Security
+    if (newConfig.enableBlockedContent !== undefined) persistedConfig.enableBlockedContent = newConfig.enableBlockedContent;
+    if (newConfig.allowedApps !== undefined) persistedConfig.allowedApps = newConfig.allowedApps;
+    if (newConfig.requireAppRegistry !== undefined) persistedConfig.requireAppRegistry = newConfig.requireAppRegistry;
+    
+    // Performance
+    if (newConfig.cacheSizeMB !== undefined) persistedConfig.cacheSizeMB = newConfig.cacheSizeMB;
+    if (newConfig.compressionEnabled !== undefined) persistedConfig.compressionEnabled = newConfig.compressionEnabled;
+    
+    // Monitoring
+    if (newConfig.metricsEnabled !== undefined) persistedConfig.metricsEnabled = newConfig.metricsEnabled;
+    if (newConfig.logLevel !== undefined) persistedConfig.logLevel = newConfig.logLevel;
     
     persistedConfig.lastUpdated = Date.now();
+    
+    console.log('[IPC] Writing config with maxStorageMB:', persistedConfig.maxStorageMB);
     
     // Ensure directory exists
     await fs.mkdir(path.dirname(configJsonPath), { recursive: true });
     
     // Write config.json
     await fs.writeFile(configJsonPath, JSON.stringify(persistedConfig, null, 2), 'utf8');
-    console.log('[Config] Saved all settings to config.json:', Object.keys(newConfig));
+    console.log('[IPC] Successfully saved config to:', configJsonPath);
   } catch (error) {
-    console.error('[Config] Failed to save to config.json:', error);
+    console.error('[IPC] Failed to save config:', error);
   }
   
   return { success: true };

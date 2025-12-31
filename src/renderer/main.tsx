@@ -93,19 +93,62 @@ interface ShardRange {
 }
 
 interface NodeConfig {
+  // Node Configuration
   nodeId: string;
   dataDir: string;
   port: number;
+  nodeUrl?: string;
+  
+  // Identity
+  ownerAddress?: string;
+  publicKey?: string;
+  
+  // P2P Configuration
   p2pEnabled: boolean;
   p2pListenAddresses: string[];
   p2pBootstrapPeers: string[];
   p2pRelayPeers: string[];
   p2pEnableRelay: boolean;
-  maxStorageMB: number;
+  
+  // Sharding
   shardCount: number;
   nodeShards: ShardRange[];
-  ownerAddress?: string;
-  publicKey?: string;
+  
+  // Garbage Collection
+  gcEnabled?: boolean;
+  gcRetentionMode?: 'size' | 'time' | 'hybrid';
+  gcMaxStorageMB?: number;
+  gcMaxBlobAgeDays?: number;
+  gcMinFreeDiskMB?: number;
+  gcReservedForPinnedMB?: number;
+  gcIntervalMinutes?: number;
+  gcVerifyReplicas?: boolean;
+  gcVerifyProofs?: boolean;
+  
+  // Storage Configuration
+  maxStorageMB: number;
+  maxBlobSizeMB?: number;
+  maxStorageGB?: number;
+  
+  // Replication Configuration
+  replicationEnabled?: boolean;
+  replicationTimeoutMs?: number;
+  replicationFactor?: number;
+  
+  // Security
+  enableBlockedContent?: boolean;
+  allowedApps?: string[];
+  requireAppRegistry?: boolean;
+  
+  // Performance
+  cacheSizeMB?: number;
+  compressionEnabled?: boolean;
+  
+  // Monitoring
+  metricsEnabled?: boolean;
+  logLevel?: string;
+  
+  // Content Types
   contentTypes?: string;
 }
 
@@ -165,6 +208,13 @@ function App() {
     return () => clearInterval(interval);
   }, [status.running, config]); // Re-create interval when status.running or config changes
 
+  // Reload config when Settings tab is activated
+  useEffect(() => {
+    if (activeTab === 'settings') {
+      loadConfig();
+    }
+  }, [activeTab]);
+
   const loadStatus = async () => {
     const s = await window.bytecave.node.status();
     setStatus(s);
@@ -192,11 +242,15 @@ function App() {
   };
 
   const loadConfig = async () => {
+    console.log('[Renderer] loadConfig() called');
     const c = await window.bytecave.config.get();
-    console.log('[Renderer] Loaded config:', c);
-    console.log('[Renderer] p2pBootstrapPeers:', c.p2pBootstrapPeers);
-    console.log('[Renderer] p2pRelayPeers:', c.p2pRelayPeers);
+    console.log('[Renderer] Loaded config from IPC:');
+    console.log('  - maxStorageMB:', c.maxStorageMB);
+    console.log('  - p2pBootstrapPeers count:', c.p2pBootstrapPeers?.length || 0);
+    console.log('  - port:', c.port);
+    console.log('[Renderer] Setting config state...');
     setConfig(c);
+    console.log('[Renderer] Config state updated');
     
     // Extract relay peer IDs from relay multiaddrs
     const relayAddrs = await window.bytecave.config.getRelayPeers();
@@ -760,6 +814,135 @@ function App() {
                 These peers are persisted in <code>data/config.json</code> and used for reconnection on restart.
               </small>
             </div>
+            
+            {/* Sharding Configuration */}
+            <h3 style={{ marginTop: '24px', marginBottom: '16px', color: '#a78bfa' }}>⚡ Sharding</h3>
+            <div className="setting-group">
+              <label>Shard Count</label>
+              <input 
+                type="number" 
+                value={config.shardCount} 
+                onChange={(e) => setConfig({ ...config, shardCount: parseInt(e.target.value) })}
+                className="input"
+              />
+              <small className="setting-hint">Total number of shards in the network (default: 1024)</small>
+            </div>
+            <div className="setting-group">
+              <label>Node Shards (JSON)</label>
+              <textarea 
+                value={JSON.stringify(config.nodeShards, null, 2)} 
+                onChange={(e) => {
+                  try {
+                    const shards = JSON.parse(e.target.value);
+                    setConfig({ ...config, nodeShards: shards });
+                  } catch (err) {
+                    // Invalid JSON, ignore
+                  }
+                }}
+                className="input textarea"
+                rows={3}
+              />
+              <small className="setting-hint">Shard ranges this node is responsible for, e.g., [{"{"}"start":0,"end":1023{"}"}]</small>
+            </div>
+
+            {/* Garbage Collection */}
+            <h3 style={{ marginTop: '24px', marginBottom: '16px', color: '#a78bfa' }}>🗑️ Garbage Collection</h3>
+            <div className="setting-group checkboxes">
+              <label>
+                <input 
+                  type="checkbox" 
+                  checked={config.gcEnabled ?? true}
+                  onChange={(e) => setConfig({ ...config, gcEnabled: e.target.checked })}
+                />
+                Enable Garbage Collection
+              </label>
+            </div>
+            <div className="setting-group">
+              <label>Retention Mode</label>
+              <select 
+                value={config.gcRetentionMode || 'hybrid'} 
+                onChange={(e) => setConfig({ ...config, gcRetentionMode: e.target.value as 'size' | 'time' | 'hybrid' })}
+                className="input"
+              >
+                <option value="size">Size - Delete oldest when storage limit reached</option>
+                <option value="time">Time - Delete content older than max age</option>
+                <option value="hybrid">Hybrid - Use both size and time constraints</option>
+              </select>
+            </div>
+            <div className="setting-group">
+              <label>Max Storage (MB)</label>
+              <input 
+                type="number" 
+                value={config.gcMaxStorageMB ?? config.maxStorageMB} 
+                onChange={(e) => setConfig({ ...config, gcMaxStorageMB: parseInt(e.target.value) })}
+                className="input"
+              />
+              <small className="setting-hint">Maximum storage in MB (default: 5000)</small>
+            </div>
+            <div className="setting-group">
+              <label>Max Blob Age (Days)</label>
+              <input 
+                type="number" 
+                value={config.gcMaxBlobAgeDays ?? 30} 
+                onChange={(e) => setConfig({ ...config, gcMaxBlobAgeDays: parseInt(e.target.value) })}
+                className="input"
+              />
+              <small className="setting-hint">Delete content older than this (default: 30 days)</small>
+            </div>
+            <div className="setting-group">
+              <label>Min Free Disk (MB)</label>
+              <input 
+                type="number" 
+                value={config.gcMinFreeDiskMB ?? 1000} 
+                onChange={(e) => setConfig({ ...config, gcMinFreeDiskMB: parseInt(e.target.value) })}
+                className="input"
+              />
+              <small className="setting-hint">Minimum free disk space to maintain (default: 1000 MB)</small>
+            </div>
+            <div className="setting-group">
+              <label>Reserved for Pinned (MB)</label>
+              <input 
+                type="number" 
+                value={config.gcReservedForPinnedMB ?? 1000} 
+                onChange={(e) => setConfig({ ...config, gcReservedForPinnedMB: parseInt(e.target.value) })}
+                className="input"
+              />
+              <small className="setting-hint">Storage reserved for pinned content (default: 1000 MB)</small>
+            </div>
+            <div className="setting-group">
+              <label>GC Interval (Minutes)</label>
+              <input 
+                type="number" 
+                value={config.gcIntervalMinutes ?? 10} 
+                onChange={(e) => setConfig({ ...config, gcIntervalMinutes: parseInt(e.target.value) })}
+                className="input"
+              />
+              <small className="setting-hint">How often to run garbage collection (default: 10 minutes)</small>
+            </div>
+            <div className="setting-group checkboxes">
+              <label>
+                <input 
+                  type="checkbox" 
+                  checked={config.gcVerifyReplicas ?? true}
+                  onChange={(e) => setConfig({ ...config, gcVerifyReplicas: e.target.checked })}
+                />
+                Verify Replicas Before Deletion
+              </label>
+              <small className="setting-hint">Recommended for data safety</small>
+            </div>
+            <div className="setting-group checkboxes">
+              <label>
+                <input 
+                  type="checkbox" 
+                  checked={config.gcVerifyProofs ?? false}
+                  onChange={(e) => setConfig({ ...config, gcVerifyProofs: e.target.checked })}
+                />
+                Verify Storage Proofs
+              </label>
+            </div>
+
+            {/* Storage Configuration */}
+            <h3 style={{ marginTop: '24px', marginBottom: '16px', color: '#a78bfa' }}>💾 Storage</h3>
             <div className="setting-group">
               <label>Max Storage (MB)</label>
               <input 
@@ -768,7 +951,150 @@ function App() {
                 onChange={(e) => setConfig({ ...config, maxStorageMB: parseInt(e.target.value) })}
                 className="input"
               />
+              <small className="setting-hint">Total storage capacity</small>
             </div>
+            <div className="setting-group">
+              <label>Max Blob Size (MB)</label>
+              <input 
+                type="number" 
+                value={config.maxBlobSizeMB ?? 10} 
+                onChange={(e) => setConfig({ ...config, maxBlobSizeMB: parseInt(e.target.value) })}
+                className="input"
+              />
+              <small className="setting-hint">Maximum size for a single blob (default: 10 MB)</small>
+            </div>
+            <div className="setting-group">
+              <label>Max Storage (GB)</label>
+              <input 
+                type="number" 
+                value={config.maxStorageGB ?? 100} 
+                onChange={(e) => setConfig({ ...config, maxStorageGB: parseInt(e.target.value) })}
+                className="input"
+              />
+              <small className="setting-hint">Maximum total storage in GB (default: 100 GB)</small>
+            </div>
+
+            {/* Replication Configuration */}
+            <h3 style={{ marginTop: '24px', marginBottom: '16px', color: '#a78bfa' }}>🔄 Replication</h3>
+            <div className="setting-group checkboxes">
+              <label>
+                <input 
+                  type="checkbox" 
+                  checked={config.replicationEnabled ?? true}
+                  onChange={(e) => setConfig({ ...config, replicationEnabled: e.target.checked })}
+                />
+                Enable Replication
+              </label>
+            </div>
+            <div className="setting-group">
+              <label>Replication Factor</label>
+              <input 
+                type="number" 
+                value={config.replicationFactor ?? 3} 
+                onChange={(e) => setConfig({ ...config, replicationFactor: parseInt(e.target.value) })}
+                className="input"
+              />
+              <small className="setting-hint">Number of copies to maintain (default: 3)</small>
+            </div>
+            <div className="setting-group">
+              <label>Replication Timeout (ms)</label>
+              <input 
+                type="number" 
+                value={config.replicationTimeoutMs ?? 5000} 
+                onChange={(e) => setConfig({ ...config, replicationTimeoutMs: parseInt(e.target.value) })}
+                className="input"
+              />
+              <small className="setting-hint">Timeout for replication requests (default: 5000 ms)</small>
+            </div>
+
+            {/* Security Configuration */}
+            <h3 style={{ marginTop: '24px', marginBottom: '16px', color: '#a78bfa' }}>🔒 Security</h3>
+            <div className="setting-group checkboxes">
+              <label>
+                <input 
+                  type="checkbox" 
+                  checked={config.enableBlockedContent ?? true}
+                  onChange={(e) => setConfig({ ...config, enableBlockedContent: e.target.checked })}
+                />
+                Enable Blocked Content Filtering
+              </label>
+            </div>
+            <div className="setting-group">
+              <label>Allowed Apps (comma-separated)</label>
+              <input 
+                type="text" 
+                value={(config.allowedApps ?? ['hashd']).join(', ')} 
+                onChange={(e) => setConfig({ 
+                  ...config, 
+                  allowedApps: e.target.value.split(',').map(s => s.trim()).filter(s => s) 
+                })}
+                className="input"
+              />
+              <small className="setting-hint">Apps this node accepts storage for (default: hashd). Leave empty to accept all registered apps.</small>
+            </div>
+            <div className="setting-group checkboxes">
+              <label>
+                <input 
+                  type="checkbox" 
+                  checked={config.requireAppRegistry ?? true}
+                  onChange={(e) => setConfig({ ...config, requireAppRegistry: e.target.checked })}
+                />
+                Require AppRegistry Validation
+              </label>
+              <small className="setting-hint">Recommended for security</small>
+            </div>
+
+            {/* Performance Configuration */}
+            <h3 style={{ marginTop: '24px', marginBottom: '16px', color: '#a78bfa' }}>⚡ Performance</h3>
+            <div className="setting-group">
+              <label>Cache Size (MB)</label>
+              <input 
+                type="number" 
+                value={config.cacheSizeMB ?? 50} 
+                onChange={(e) => setConfig({ ...config, cacheSizeMB: parseInt(e.target.value) })}
+                className="input"
+              />
+              <small className="setting-hint">Memory cache size (default: 50 MB)</small>
+            </div>
+            <div className="setting-group checkboxes">
+              <label>
+                <input 
+                  type="checkbox" 
+                  checked={config.compressionEnabled ?? false}
+                  onChange={(e) => setConfig({ ...config, compressionEnabled: e.target.checked })}
+                />
+                Enable Compression
+              </label>
+            </div>
+
+            {/* Monitoring Configuration */}
+            <h3 style={{ marginTop: '24px', marginBottom: '16px', color: '#a78bfa' }}>📊 Monitoring</h3>
+            <div className="setting-group checkboxes">
+              <label>
+                <input 
+                  type="checkbox" 
+                  checked={config.metricsEnabled ?? true}
+                  onChange={(e) => setConfig({ ...config, metricsEnabled: e.target.checked })}
+                />
+                Enable Metrics
+              </label>
+            </div>
+            <div className="setting-group">
+              <label>Log Level</label>
+              <select 
+                value={config.logLevel || 'info'} 
+                onChange={(e) => setConfig({ ...config, logLevel: e.target.value })}
+                className="input"
+              >
+                <option value="error">Error</option>
+                <option value="warn">Warning</option>
+                <option value="info">Info</option>
+                <option value="debug">Debug</option>
+              </select>
+            </div>
+
+            {/* P2P Configuration */}
+            <h3 style={{ marginTop: '24px', marginBottom: '16px', color: '#a78bfa' }}>🌐 P2P</h3>
             <div className="setting-group checkboxes">
               <label>
                 <input 
@@ -782,9 +1108,14 @@ function App() {
             <button 
               className="btn btn-primary"
               onClick={async () => {
+                console.log('[Renderer] Saving config:', { maxStorageMB: config.maxStorageMB, port: config.port });
                 await window.bytecave.config.set(config);
-                // Reload config to show updated values from config.json
+                console.log('[Renderer] Config saved, waiting before reload...');
+                // Wait a bit for file write to complete, then reload
+                await new Promise(resolve => setTimeout(resolve, 200));
+                console.log('[Renderer] Reloading config...');
                 await loadConfig();
+                console.log('[Renderer] Config reloaded');
                 alert('Settings saved! Restart the node for changes to take effect.');
               }}
             >
