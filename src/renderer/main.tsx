@@ -159,6 +159,7 @@ function App() {
       loadStatus();
       loadPeers();
       loadBroadcasts();
+      loadConfig(); // Reload config to pick up auto-saved bootstrap peers
     }, 10000); // Poll every 10 seconds
 
     return () => clearInterval(interval);
@@ -193,6 +194,7 @@ function App() {
   const loadConfig = async () => {
     const c = await window.bytecave.config.get();
     console.log('[Renderer] Loaded config:', c);
+    console.log('[Renderer] p2pBootstrapPeers:', c.p2pBootstrapPeers);
     console.log('[Renderer] p2pRelayPeers:', c.p2pRelayPeers);
     setConfig(c);
     
@@ -733,18 +735,21 @@ function App() {
             <div className="setting-group">
               <label>
                 Bootstrap Peers (for cross-network discovery)
-                {config.p2pBootstrapPeers && config.p2pBootstrapPeers.length > 0 && (
+                {config?.p2pBootstrapPeers && config.p2pBootstrapPeers.length > 0 && (
                   <span style={{ marginLeft: '8px', fontSize: '12px', color: '#4ade80' }}>
                     ✓ {config.p2pBootstrapPeers.length} peer{config.p2pBootstrapPeers.length !== 1 ? 's' : ''} saved
                   </span>
                 )}
               </label>
               <textarea 
-                value={(config.p2pBootstrapPeers || []).join('\n')} 
-                onChange={(e) => setConfig({ 
-                  ...config, 
-                  p2pBootstrapPeers: e.target.value.split('\n').filter(p => p.trim()) 
-                })}
+                value={config?.p2pBootstrapPeers ? config.p2pBootstrapPeers.join('\n') : ''} 
+                onChange={(e) => {
+                  if (!config) return;
+                  setConfig({ 
+                    ...config, 
+                    p2pBootstrapPeers: e.target.value.split('\n').filter(p => p.trim()) 
+                  });
+                }}
                 placeholder="/ip4/1.2.3.4/tcp/4001/p2p/12D3KooW..."
                 className="input textarea"
                 rows={5}

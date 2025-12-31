@@ -43,13 +43,15 @@ let nodeRunning = false;
 // Get config from environment (for multi-instance testing) or use defaults
 const envPort = process.env.BYTENODE_PORT ? parseInt(process.env.BYTENODE_PORT) : 5001;
 const envNodeId = process.env.BYTENODE_NODE_ID || `bytecave-${Date.now()}`;
-const envBaseDataDir = process.env.BYTENODE_DATA_DIR || path.join(os.homedir(), '.bytecave');
 const envP2pPorts = process.env.BYTENODE_P2P_PORTS?.split(',') || ['4001', '4002'];
 const envRelayPeers = process.env.BYTENODE_RELAY_PEERS?.split(',') || [];
 const envBootstrapPeers = process.env.BYTENODE_BOOTSTRAP_PEERS?.split(',') || [];
 
-// Create data directory with nodeId subfolder: e.g., ~/.bytecave/bat-alpha
-const envDataDir = path.join(envBaseDataDir, envNodeId);
+// Data directory: if BYTENODE_DATA_DIR is set, use it as-is (already includes nodeId)
+// Otherwise, create path with nodeId subfolder: e.g., ~/.bytecave/bat-alpha
+const envDataDir = process.env.BYTENODE_DATA_DIR 
+  ? process.env.BYTENODE_DATA_DIR
+  : path.join(os.homedir(), '.bytecave', envNodeId);
 
 // Default config
 const defaultConfig: NodeConfig = {
@@ -88,28 +90,32 @@ function getConfig(): NodeConfig {
   };
   
   // Ensure dataDir includes nodeId subfolder
-  // If user changed dataDir, append nodeId; if it already has nodeId, keep it
-  const baseDataDir = mergedConfig.dataDir.includes(mergedConfig.nodeId) 
+  // Check if the last path component is the nodeId to avoid double-nesting
+  const pathParts = mergedConfig.dataDir.split(path.sep);
+  const lastPart = pathParts[pathParts.length - 1];
+  const baseDataDir = lastPart === mergedConfig.nodeId
     ? mergedConfig.dataDir 
     : path.join(mergedConfig.dataDir, mergedConfig.nodeId);
   mergedConfig.dataDir = baseDataDir;
   
-  // Also load P2P settings from bytecave-core's config.json if it exists
+  // Also load ALL settings from bytecave-core's config.json if it exists
   try {
     const configJsonPath = path.join(mergedConfig.dataDir, 'config.json');
     if (fs.existsSync(configJsonPath)) {
       const data = fs.readFileSync(configJsonPath, 'utf8');
       const persistedConfig = JSON.parse(data);
       
-      // Merge P2P settings from config.json (they take precedence over electron-store)
-      if (persistedConfig.p2pBootstrapPeers) {
-        mergedConfig.p2pBootstrapPeers = persistedConfig.p2pBootstrapPeers;
-      }
-      if (persistedConfig.p2pRelayPeers) {
-        mergedConfig.p2pRelayPeers = persistedConfig.p2pRelayPeers;
-      }
+      // Merge ALL settings from config.json (they take precedence over electron-store)
+      if (persistedConfig.p2pBootstrapPeers) mergedConfig.p2pBootstrapPeers = persistedConfig.p2pBootstrapPeers;
+      if (persistedConfig.p2pRelayPeers) mergedConfig.p2pRelayPeers = persistedConfig.p2pRelayPeers;
+      if (persistedConfig.ownerAddress) mergedConfig.ownerAddress = persistedConfig.ownerAddress;
+      if (persistedConfig.publicKey) mergedConfig.publicKey = persistedConfig.publicKey;
+      if (persistedConfig.contentTypes) mergedConfig.contentTypes = persistedConfig.contentTypes;
+      if (persistedConfig.maxStorageMB) mergedConfig.maxStorageMB = persistedConfig.maxStorageMB;
+      if (persistedConfig.port) mergedConfig.port = persistedConfig.port;
+      if (persistedConfig.nodeId) mergedConfig.nodeId = persistedConfig.nodeId;
       
-      console.log('[Config] Loaded P2P settings from config.json');
+      console.log('[Config] Loaded all settings from config.json');
     }
   } catch (error) {
     console.warn('[Config] Failed to load config.json:', error);
@@ -320,6 +326,8 @@ async function stopNode(): Promise<void> {
   console.log('[stopNode] Stopping node process...');
 
   return new Promise((resolve) => {
+    const pid = nodeProcess!.pid;
+    
     const exitHandler = () => {
       console.log('[stopNode] Node process exited');
       nodeProcess = null;
@@ -336,16 +344,22 @@ async function stopNode(): Promise<void> {
     nodeProcess!.once('exit', exitHandler);
 
     // Send SIGTERM for graceful shutdown
-    console.log('[stopNode] Sending SIGTERM');
+    console.log('[stopNode] Sending SIGTERM to PID', pid);
     nodeProcess!.kill('SIGTERM');
 
-    // Force kill after 5 seconds
+    // Force kill after 3 seconds (reduced from 5)
     setTimeout(() => {
-      if (nodeProcess) {
-        console.log('[stopNode] Process still running, sending SIGKILL');
-        nodeProcess.kill('SIGKILL');
+      if (nodeProcess && pid) {
+        console.log('[stopNode] Process still running, sending SIGKILL to PID', pid);
+        try {
+          // Kill the entire process group to ensure child processes are killed
+          process.kill(-pid, 'SIGKILL');
+        } catch (error) {
+          console.log('[stopNode] Failed to kill process group, trying direct kill');
+          nodeProcess.kill('SIGKILL');
+        }
       }
-    }, 5000);
+    }, 3000);
   });
 }
 
@@ -420,40 +434,42 @@ ipcMain.handle('config:set', async (_event, newConfig: Partial<NodeConfig>) => {
   // Save to electron-store for desktop-specific settings
   store.set('nodeConfig', { ...getConfig(), ...newConfig });
   
-  // Also save P2P settings to bytecave-core's config.json
-  if (newConfig.p2pBootstrapPeers || newConfig.p2pRelayPeers) {
+  // Also save ALL settings to bytecave-core's config.json
+  try {
+    const config = getConfig();
+    const configJsonPath = path.join(config.dataDir, 'config.json');
+    const fs = await import('fs/promises');
+    
+    let persistedConfig: any = {};
     try {
-      const config = getConfig();
-      const configJsonPath = path.join(config.dataDir, 'config.json');
-      const fs = await import('fs/promises');
-      
-      let persistedConfig: any = {};
-      try {
-        const data = await fs.readFile(configJsonPath, 'utf8');
-        persistedConfig = JSON.parse(data);
-      } catch (err) {
-        // File doesn't exist yet, will create it
-      }
-      
-      // Update P2P settings
-      if (newConfig.p2pBootstrapPeers !== undefined) {
-        persistedConfig.p2pBootstrapPeers = newConfig.p2pBootstrapPeers;
-      }
-      if (newConfig.p2pRelayPeers !== undefined) {
-        persistedConfig.p2pRelayPeers = newConfig.p2pRelayPeers;
-      }
-      
-      persistedConfig.lastUpdated = Date.now();
-      
-      // Ensure directory exists
-      await fs.mkdir(path.dirname(configJsonPath), { recursive: true });
-      
-      // Write config.json
-      await fs.writeFile(configJsonPath, JSON.stringify(persistedConfig, null, 2), 'utf8');
-      console.log('[Config] Saved P2P settings to config.json');
-    } catch (error) {
-      console.error('[Config] Failed to save to config.json:', error);
+      const data = await fs.readFile(configJsonPath, 'utf8');
+      persistedConfig = JSON.parse(data);
+    } catch (err) {
+      // File doesn't exist yet, will create it
     }
+    
+    // Update ALL settings that were changed
+    if (newConfig.nodeId !== undefined) persistedConfig.nodeId = newConfig.nodeId;
+    if (newConfig.port !== undefined) persistedConfig.port = newConfig.port;
+    if (newConfig.maxStorageMB !== undefined) persistedConfig.maxStorageMB = newConfig.maxStorageMB;
+    if (newConfig.p2pBootstrapPeers !== undefined) persistedConfig.p2pBootstrapPeers = newConfig.p2pBootstrapPeers;
+    if (newConfig.p2pRelayPeers !== undefined) persistedConfig.p2pRelayPeers = newConfig.p2pRelayPeers;
+    if (newConfig.shardCount !== undefined) persistedConfig.shardCount = newConfig.shardCount;
+    if (newConfig.nodeShards !== undefined) persistedConfig.nodeShards = newConfig.nodeShards;
+    if (newConfig.ownerAddress !== undefined) persistedConfig.ownerAddress = newConfig.ownerAddress;
+    if (newConfig.publicKey !== undefined) persistedConfig.publicKey = newConfig.publicKey;
+    if (newConfig.contentTypes !== undefined) persistedConfig.contentTypes = newConfig.contentTypes;
+    
+    persistedConfig.lastUpdated = Date.now();
+    
+    // Ensure directory exists
+    await fs.mkdir(path.dirname(configJsonPath), { recursive: true });
+    
+    // Write config.json
+    await fs.writeFile(configJsonPath, JSON.stringify(persistedConfig, null, 2), 'utf8');
+    console.log('[Config] Saved all settings to config.json:', Object.keys(newConfig));
+  } catch (error) {
+    console.error('[Config] Failed to save to config.json:', error);
   }
   
   return { success: true };
