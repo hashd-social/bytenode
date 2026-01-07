@@ -991,18 +991,14 @@ function App() {
               </label>
             </div>
             <div className="setting-group">
-              <label>Replication Factor</label>
-              <input 
-                type="number" 
-                value={config.replicationFactor ?? 3} 
-                onChange={(e) => setConfig({ ...config, replicationFactor: parseInt(e.target.value) })}
-                className="input"
-              />
-              <small className="setting-hint">
-                Target number of copies for each blob across the network. Higher = more redundancy but more storage used.
-                <br />
-                <strong>Default: 3 replicas</strong>
-              </small>
+              <div style={{ padding: '12px', backgroundColor: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '8px' }}>
+                <p style={{ margin: 0, fontSize: '13px', color: '#a78bfa' }}>
+                  ℹ️ <strong>Replication Factor:</strong> Fixed at 3 replicas (protocol constant)
+                </p>
+                <small style={{ display: 'block', marginTop: '8px', color: '#c4b5fd', fontSize: '11px' }}>
+                  All nodes maintain 3 copies of each blob for network consistency. This ensures predictable redundancy and prevents coordination issues.
+                </small>
+              </div>
             </div>
             <div className="setting-group">
               <label>Replication Timeout (ms)</label>
