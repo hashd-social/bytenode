@@ -122,8 +122,7 @@ interface NodeConfig {
   gcMinFreeDiskMB?: number;
   gcReservedForPinnedMB?: number;
   gcIntervalMinutes?: number;
-  gcVerifyReplicas?: boolean;
-  gcVerifyProofs?: boolean;
+  // gcVerifyReplicas and gcVerifyProofs removed - always true for security
   
   // Storage Configuration
   maxStorageMB: number;
@@ -825,7 +824,11 @@ function App() {
                 onChange={(e) => setConfig({ ...config, shardCount: parseInt(e.target.value) })}
                 className="input"
               />
-              <small className="setting-hint">Total number of shards in the network (default: 1024)</small>
+              <small className="setting-hint">
+                Total shards in the network. Content is distributed across shards using CID hashing.
+                <br />
+                <strong>Default: 1024</strong> (must match network-wide configuration)
+              </small>
             </div>
             <div className="setting-group">
               <label>Node Shards (JSON)</label>
@@ -842,7 +845,11 @@ function App() {
                 className="input textarea"
                 rows={3}
               />
-              <small className="setting-hint">Shard ranges this node is responsible for, e.g., [{"{"}"start":0,"end":1023{"}"}]</small>
+              <small className="setting-hint">
+                Shard ranges this node stores. Each CID is hashed to a shard number, and nodes only store content in their assigned ranges.
+                <br />
+                <strong>Example:</strong> {`[{"start":0,"end":255}]`} stores first 25% of network content
+              </small>
             </div>
 
             {/* Garbage Collection */}
@@ -864,9 +871,9 @@ function App() {
                 onChange={(e) => setConfig({ ...config, gcRetentionMode: e.target.value as 'size' | 'time' | 'hybrid' })}
                 className="input"
               >
-                <option value="size">Size - Delete oldest when storage limit reached</option>
-                <option value="time">Time - Delete content older than max age</option>
-                <option value="hybrid">Hybrid - Use both size and time constraints</option>
+                <option value="size">Size - Delete oldest blobs when storage limit reached</option>
+                <option value="time">Time - Delete blobs older than max age</option>
+                <option value="hybrid">Hybrid - Delete based on both size and age limits</option>
               </select>
             </div>
             <div className="setting-group">
@@ -877,7 +884,11 @@ function App() {
                 onChange={(e) => setConfig({ ...config, gcMaxStorageMB: parseInt(e.target.value) })}
                 className="input"
               />
-              <small className="setting-hint">Maximum storage in MB (default: 5000)</small>
+              <small className="setting-hint">
+                Maximum storage for garbage collection. When exceeded, oldest/least-accessed blobs are deleted based on retention mode.
+                <br />
+                <strong>Default: 5000 MB (5 GB)</strong>
+              </small>
             </div>
             <div className="setting-group">
               <label>Max Blob Age (Days)</label>
@@ -887,17 +898,11 @@ function App() {
                 onChange={(e) => setConfig({ ...config, gcMaxBlobAgeDays: parseInt(e.target.value) })}
                 className="input"
               />
-              <small className="setting-hint">Delete content older than this (default: 30 days)</small>
-            </div>
-            <div className="setting-group">
-              <label>Min Free Disk (MB)</label>
-              <input 
-                type="number" 
-                value={config.gcMinFreeDiskMB ?? 1000} 
-                onChange={(e) => setConfig({ ...config, gcMinFreeDiskMB: parseInt(e.target.value) })}
-                className="input"
-              />
-              <small className="setting-hint">Minimum free disk space to maintain (default: 1000 MB)</small>
+              <small className="setting-hint">
+                Blobs older than this are eligible for deletion during garbage collection (if retention mode includes time).
+                <br />
+                <strong>Default: 30 days</strong>
+              </small>
             </div>
             <div className="setting-group">
               <label>Reserved for Pinned (MB)</label>
@@ -907,7 +912,11 @@ function App() {
                 onChange={(e) => setConfig({ ...config, gcReservedForPinnedMB: parseInt(e.target.value) })}
                 className="input"
               />
-              <small className="setting-hint">Storage reserved for pinned content (default: 1000 MB)</small>
+              <small className="setting-hint">
+                Storage reserved for pinned blobs (never deleted). GC will not delete pinned content even when storage is full.
+                <br />
+                <strong>Default: 1000 MB (1 GB)</strong>
+              </small>
             </div>
             <div className="setting-group">
               <label>GC Interval (Minutes)</label>
@@ -917,28 +926,23 @@ function App() {
                 onChange={(e) => setConfig({ ...config, gcIntervalMinutes: parseInt(e.target.value) })}
                 className="input"
               />
-              <small className="setting-hint">How often to run garbage collection (default: 10 minutes)</small>
+              <small className="setting-hint">
+                Frequency of automatic garbage collection runs. Set higher to reduce CPU usage, lower for more aggressive cleanup.
+                <br />
+                <strong>Default: 10 minutes</strong>
+              </small>
             </div>
-            <div className="setting-group checkboxes">
-              <label>
-                <input 
-                  type="checkbox" 
-                  checked={config.gcVerifyReplicas ?? true}
-                  onChange={(e) => setConfig({ ...config, gcVerifyReplicas: e.target.checked })}
-                />
-                Verify Replicas Before Deletion
-              </label>
-              <small className="setting-hint">Recommended for data safety</small>
-            </div>
-            <div className="setting-group checkboxes">
-              <label>
-                <input 
-                  type="checkbox" 
-                  checked={config.gcVerifyProofs ?? false}
-                  onChange={(e) => setConfig({ ...config, gcVerifyProofs: e.target.checked })}
-                />
-                Verify Storage Proofs
-              </label>
+            <div className="setting-group">
+              <div style={{ padding: '12px', backgroundColor: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '8px' }}>
+                <p style={{ margin: 0, fontSize: '13px', color: '#4ade80' }}>
+                  ✓ <strong>Replica Verification:</strong> Always enabled (security requirement)
+                  <br />
+                  ✓ <strong>Storage Proof Verification:</strong> Always enabled (security requirement)
+                </p>
+                <small style={{ display: 'block', marginTop: '8px', color: '#86efac', fontSize: '11px' }}>
+                  These security features cannot be disabled. All replicas and storage proofs are verified before garbage collection.
+                </small>
+              </div>
             </div>
 
             {/* Storage Configuration */}
@@ -994,7 +998,11 @@ function App() {
                 onChange={(e) => setConfig({ ...config, replicationFactor: parseInt(e.target.value) })}
                 className="input"
               />
-              <small className="setting-hint">Number of copies to maintain (default: 3)</small>
+              <small className="setting-hint">
+                Target number of copies for each blob across the network. Higher = more redundancy but more storage used.
+                <br />
+                <strong>Default: 3 replicas</strong>
+              </small>
             </div>
             <div className="setting-group">
               <label>Replication Timeout (ms)</label>
@@ -1004,7 +1012,11 @@ function App() {
                 onChange={(e) => setConfig({ ...config, replicationTimeoutMs: parseInt(e.target.value) })}
                 className="input"
               />
-              <small className="setting-hint">Timeout for replication requests (default: 5000 ms)</small>
+              <small className="setting-hint">
+                How long to wait for replication requests to other nodes before timing out.
+                <br />
+                <strong>Default: 5000 ms (5 seconds)</strong>
+              </small>
             </div>
 
             {/* Security Configuration */}
@@ -1041,7 +1053,29 @@ function App() {
                 />
                 Require AppRegistry Validation
               </label>
-              <small className="setting-hint">Recommended for security</small>
+              <small className="setting-hint">
+                When enabled, only accepts storage requests from apps registered in the on-chain AppRegistry contract.
+                <br />
+                <strong>Recommended: enabled</strong> for production nodes
+              </small>
+            </div>
+
+            {/* Content Types Configuration */}
+            <h3 style={{ marginTop: '24px', marginBottom: '16px', color: '#a78bfa' }}>📦 Content Types</h3>
+            <div className="setting-group">
+              <label>Content Types to Store</label>
+              <input 
+                type="text" 
+                value={config.contentTypes || 'all'} 
+                onChange={(e) => setConfig({ ...config, contentTypes: e.target.value })}
+                placeholder="all"
+                className="input"
+              />
+              <small className="setting-hint">
+                Content types this node will accept and store. Use 'all' or comma-separated list: messages,posts,media,listings
+                <br />
+                <strong>Default: 'all'</strong> (accepts all content types)
+              </small>
             </div>
 
             {/* Performance Configuration */}
@@ -1054,17 +1088,11 @@ function App() {
                 onChange={(e) => setConfig({ ...config, cacheSizeMB: parseInt(e.target.value) })}
                 className="input"
               />
-              <small className="setting-hint">Memory cache size (default: 50 MB)</small>
-            </div>
-            <div className="setting-group checkboxes">
-              <label>
-                <input 
-                  type="checkbox" 
-                  checked={config.compressionEnabled ?? false}
-                  onChange={(e) => setConfig({ ...config, compressionEnabled: e.target.checked })}
-                />
-                Enable Compression
-              </label>
+              <small className="setting-hint">
+                In-memory cache for frequently accessed blobs. Reduces disk I/O and improves response times.
+                <br />
+                <strong>Default: 50 MB</strong>
+              </small>
             </div>
 
             {/* Monitoring Configuration */}

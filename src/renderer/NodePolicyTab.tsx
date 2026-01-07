@@ -11,11 +11,6 @@ interface BlockedContent {
   peerIds: string[];
 }
 
-interface GuildConfig {
-  allowedGuilds: 'all' | string[];
-  blockedGuilds: string[];
-}
-
 interface NodePolicyTabProps {
   config: any;
   onConfigChange: (config: any) => void;
@@ -28,19 +23,12 @@ export function NodePolicyTab({ config, onConfigChange }: NodePolicyTabProps) {
     cids: [],
     peerIds: []
   });
-  const [guildConfig, setGuildConfig] = useState<GuildConfig>({
-    allowedGuilds: 'all',
-    blockedGuilds: []
-  });
   const [newCid, setNewCid] = useState('');
   const [newPeerId, setNewPeerId] = useState('');
-  const [newGuildId, setNewGuildId] = useState('');
-  const [guildMode, setGuildMode] = useState<'all' | 'allowlist' | 'blocklist'>('all');
 
-  // Load blocked content and guild config on mount
+  // Load blocked content on mount
   useEffect(() => {
     loadBlockedContent();
-    loadGuildConfig();
   }, []);
 
   const loadBlockedContent = async () => {
@@ -50,50 +38,6 @@ export function NodePolicyTab({ config, onConfigChange }: NodePolicyTabProps) {
     } catch (error) {
       console.error('Failed to load blocked content:', error);
     }
-  };
-
-  const loadGuildConfig = async () => {
-    try {
-      const guilds = await window.bytecave.policy.getGuilds();
-      setGuildConfig(guilds);
-      
-      // Determine mode
-      if (guilds.allowedGuilds === 'all') {
-        setGuildMode(guilds.blockedGuilds.length > 0 ? 'blocklist' : 'all');
-      } else {
-        setGuildMode('allowlist');
-      }
-    } catch (error) {
-      console.error('Failed to load guild config:', error);
-    }
-  };
-
-  const handleContentTypeChange = (type: string, checked: boolean) => {
-    const currentTypes = config.contentTypes || 'all';
-    let types: string[];
-
-    if (currentTypes === 'all') {
-      types = ['messages', 'posts', 'media', 'listings'];
-    } else {
-      types = currentTypes.split(',');
-    }
-
-    if (checked) {
-      if (!types.includes(type)) {
-        types.push(type);
-      }
-    } else {
-      types = types.filter(t => t !== type);
-    }
-
-    const newContentTypes = types.length === 4 ? 'all' : types.join(',');
-    onConfigChange({ ...config, contentTypes: newContentTypes });
-  };
-
-  const isContentTypeEnabled = (type: string): boolean => {
-    const currentTypes = config.contentTypes || 'all';
-    if (currentTypes === 'all') return true;
-    return currentTypes.split(',').includes(type);
   };
 
   const handleBlockCid = async () => {
@@ -140,199 +84,9 @@ export function NodePolicyTab({ config, onConfigChange }: NodePolicyTabProps) {
     }
   };
 
-  const handleGuildModeChange = async (mode: 'all' | 'allowlist' | 'blocklist') => {
-    setGuildMode(mode);
-    
-    let newConfig: GuildConfig;
-    if (mode === 'all') {
-      newConfig = { allowedGuilds: 'all', blockedGuilds: [] };
-    } else if (mode === 'allowlist') {
-      newConfig = { allowedGuilds: [], blockedGuilds: [] };
-    } else {
-      newConfig = { allowedGuilds: 'all', blockedGuilds: guildConfig.blockedGuilds };
-    }
-    
-    try {
-      await window.bytecave.policy.setGuilds(newConfig);
-      setGuildConfig(newConfig);
-    } catch (error) {
-      console.error('Failed to update guild mode:', error);
-    }
-  };
-
-  const handleAddGuild = async () => {
-    if (!newGuildId.trim()) return;
-    
-    try {
-      const newConfig = { ...guildConfig };
-      
-      if (guildMode === 'allowlist') {
-        if (Array.isArray(newConfig.allowedGuilds)) {
-          newConfig.allowedGuilds.push(newGuildId.trim());
-        }
-      } else if (guildMode === 'blocklist') {
-        newConfig.blockedGuilds.push(newGuildId.trim());
-      }
-      
-      await window.bytecave.policy.setGuilds(newConfig);
-      setGuildConfig(newConfig);
-      setNewGuildId('');
-    } catch (error) {
-      console.error('Failed to add guild:', error);
-    }
-  };
-
-  const handleRemoveGuild = async (guildId: string, list: 'allowed' | 'blocked') => {
-    try {
-      const newConfig = { ...guildConfig };
-      
-      if (list === 'allowed' && Array.isArray(newConfig.allowedGuilds)) {
-        newConfig.allowedGuilds = newConfig.allowedGuilds.filter(id => id !== guildId);
-      } else if (list === 'blocked') {
-        newConfig.blockedGuilds = newConfig.blockedGuilds.filter(id => id !== guildId);
-      }
-      
-      await window.bytecave.policy.setGuilds(newConfig);
-      setGuildConfig(newConfig);
-    } catch (error) {
-      console.error('Failed to remove guild:', error);
-    }
-  };
-
   return (
     <div className="tab-content">
       <h2>🛡️ Node Policy</h2>
-      
-      {/* Content Types */}
-      <section className="policy-section">
-        <h3>Content Types to Store</h3>
-        <p className="help-text">Choose which types of content this node will store</p>
-        
-        <div className="checkbox-group">
-          <label>
-            <input
-              type="checkbox"
-              checked={isContentTypeEnabled('messages')}
-              onChange={(e) => handleContentTypeChange('messages', e.target.checked)}
-            />
-            <span>Messages</span>
-            <span className="help-text">Direct messages and chats</span>
-          </label>
-          
-          <label>
-            <input
-              type="checkbox"
-              checked={isContentTypeEnabled('posts')}
-              onChange={(e) => handleContentTypeChange('posts', e.target.checked)}
-            />
-            <span>Posts</span>
-            <span className="help-text">Social posts and comments</span>
-          </label>
-          
-          <label>
-            <input
-              type="checkbox"
-              checked={isContentTypeEnabled('media')}
-              onChange={(e) => handleContentTypeChange('media', e.target.checked)}
-            />
-            <span>Media</span>
-            <span className="help-text">Images and videos</span>
-          </label>
-          
-          <label>
-            <input
-              type="checkbox"
-              checked={isContentTypeEnabled('listings')}
-              onChange={(e) => handleContentTypeChange('listings', e.target.checked)}
-            />
-            <span>Listings</span>
-            <span className="help-text">Marketplace listings</span>
-          </label>
-        </div>
-      </section>
-
-      {/* Guild Filtering */}
-      <section className="policy-section">
-        <h3>Guild Filtering</h3>
-        <p className="help-text">Control which guilds/groups this node accepts content from</p>
-        
-        <div className="radio-group">
-          <label>
-            <input
-              type="radio"
-              checked={guildMode === 'all'}
-              onChange={() => handleGuildModeChange('all')}
-            />
-            <span>Accept all guilds</span>
-          </label>
-          
-          <label>
-            <input
-              type="radio"
-              checked={guildMode === 'allowlist'}
-              onChange={() => handleGuildModeChange('allowlist')}
-            />
-            <span>Only specific guilds (allowlist)</span>
-          </label>
-          
-          <label>
-            <input
-              type="radio"
-              checked={guildMode === 'blocklist'}
-              onChange={() => handleGuildModeChange('blocklist')}
-            />
-            <span>Block specific guilds</span>
-          </label>
-        </div>
-
-        {guildMode === 'allowlist' && (
-          <div className="list-manager">
-            <h4>Allowed Guilds</h4>
-            <div className="input-group">
-              <input
-                type="text"
-                value={newGuildId}
-                onChange={(e) => setNewGuildId(e.target.value)}
-                placeholder="Guild ID"
-                onKeyPress={(e) => e.key === 'Enter' && handleAddGuild()}
-              />
-              <button onClick={handleAddGuild}>Add</button>
-            </div>
-            <ul className="item-list">
-              {Array.isArray(guildConfig.allowedGuilds) && guildConfig.allowedGuilds.map(guildId => (
-                <li key={guildId}>
-                  <span>{guildId}</span>
-                  <button onClick={() => handleRemoveGuild(guildId, 'allowed')}>Remove</button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {guildMode === 'blocklist' && (
-          <div className="list-manager">
-            <h4>Blocked Guilds</h4>
-            <div className="input-group">
-              <input
-                type="text"
-                value={newGuildId}
-                onChange={(e) => setNewGuildId(e.target.value)}
-                placeholder="Guild ID"
-                onKeyPress={(e) => e.key === 'Enter' && handleAddGuild()}
-              />
-              <button onClick={handleAddGuild}>Add</button>
-            </div>
-            <ul className="item-list">
-              {guildConfig.blockedGuilds.map(guildId => (
-                <li key={guildId}>
-                  <span>{guildId}</span>
-                  <button onClick={() => handleRemoveGuild(guildId, 'blocked')}>Remove</button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </section>
 
       {/* Blocked CIDs */}
       <section className="policy-section">
