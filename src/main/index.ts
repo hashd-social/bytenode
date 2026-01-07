@@ -699,6 +699,51 @@ ipcMain.handle('policy:set-guilds', async (_event, guildsConfig: any) => {
   }
 });
 
+ipcMain.handle('node:reset', async () => {
+  console.log('[IPC] node:reset called - resetting node to fresh state');
+  
+  try {
+    // Stop node if running
+    if (nodeRunning) {
+      console.log('[Reset] Stopping node...');
+      await stopNode();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    const config = getConfig();
+    const dataDir = config.dataDir;
+    const configPath = path.join(dataDir, 'config', 'config.json');
+    
+    console.log('[Reset] Deleting data directory:', dataDir);
+    
+    // Delete the entire data directory
+    const fs = await import('fs/promises');
+    try {
+      await fs.rm(dataDir, { recursive: true, force: true });
+      console.log('[Reset] Data directory deleted');
+    } catch (err: any) {
+      console.error('[Reset] Failed to delete data directory:', err);
+      throw new Error(`Failed to delete data directory: ${err.message}`);
+    }
+    
+    // Recreate the data directory structure
+    await fs.mkdir(path.join(dataDir, 'config'), { recursive: true });
+    await fs.mkdir(path.join(dataDir, 'blobs'), { recursive: true });
+    await fs.mkdir(path.join(dataDir, 'metadata'), { recursive: true });
+    console.log('[Reset] Data directory structure recreated');
+    
+    // Clear electron-store (UI preferences)
+    store.clear();
+    console.log('[Reset] Electron store cleared');
+    
+    console.log('[Reset] Node reset complete - ready for fresh start');
+    return { success: true };
+  } catch (error: any) {
+    console.error('[Reset] Reset failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // Prevent multiple instances (unless in multi-instance mode for testing)
 const isMultiInstance = !!process.env.BYTENODE_PORT;
 

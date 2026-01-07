@@ -1133,8 +1133,55 @@ function App() {
                 Enable Relay (NAT Traversal)
               </label>
             </div>
+            <div style={{ marginTop: '24px', padding: '16px', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '8px' }}>
+              <h4 style={{ margin: '0 0 8px 0', color: '#f87171' }}>⚠️ Danger Zone</h4>
+              <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#fca5a5' }}>
+                Reset will permanently delete all stored data, blobs, and configuration. The node will restart as if it's a fresh installation.
+              </p>
+              <button 
+                className="btn"
+                style={{ backgroundColor: '#dc2626', color: 'white', marginRight: '12px' }}
+                onClick={async () => {
+                  const confirmed = window.confirm(
+                    '⚠️ WARNING: This will permanently delete:\n\n' +
+                    '• All stored blobs and data\n' +
+                    '• Node configuration (config.json)\n' +
+                    '• Node identity and peer history\n\n' +
+                    'The node will restart as a fresh installation.\n\n' +
+                    'Are you absolutely sure you want to continue?'
+                  );
+                  
+                  if (!confirmed) return;
+                  
+                  const doubleCheck = window.confirm(
+                    'This action CANNOT be undone!\n\n' +
+                    'Type "DELETE" in the next prompt to confirm.'
+                  );
+                  
+                  if (!doubleCheck) return;
+                  
+                  const finalConfirm = window.prompt('Type DELETE to confirm:');
+                  if (finalConfirm !== 'DELETE') {
+                    alert('Reset cancelled - confirmation text did not match.');
+                    return;
+                  }
+                  
+                  try {
+                    await window.bytecave.resetNode();
+                    alert('Node reset complete! The application will now restart.');
+                    window.location.reload();
+                  } catch (err: any) {
+                    alert('Reset failed: ' + err.message);
+                  }
+                }}
+              >
+                Reset Node
+              </button>
+            </div>
+
             <button 
               className="btn btn-primary"
+              style={{ marginTop: '16px' }}
               onClick={async () => {
                 console.log('[Renderer] Saving config:', { maxStorageMB: config.maxStorageMB, port: config.port });
                 await window.bytecave.config.set(config);

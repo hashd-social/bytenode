@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld('bytecave', {
     set: (config: any) => ipcRenderer.invoke('config:set', config),
     getRelayPeers: () => ipcRenderer.invoke('config:getRelayPeers')
   },
+  resetNode: () => ipcRenderer.invoke('node:reset'),
   policy: {
     getBlockedContent: () => ipcRenderer.invoke('policy:get-blocked-content'),
     blockCid: (cid: string) => ipcRenderer.invoke('policy:block-cid', cid),
