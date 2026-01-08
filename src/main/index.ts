@@ -65,6 +65,10 @@ interface NodeConfig {
   allowedApps?: string[];
   requireAppRegistry?: boolean;
   
+  // Contract Integration
+  rpcUrl?: string;
+  registryAddress?: string;
+  
   // Performance
   cacheSizeMB?: number;
   compressionEnabled?: boolean;
@@ -110,7 +114,9 @@ const defaultConfig: NodeConfig = {
   p2pEnableMDNS: true,
   maxStorageMB: 1024,
   shardCount: 1024,
-  nodeShards: [{ start: 0, end: 1023 }]
+  nodeShards: [{ start: 0, end: 1023 }],
+  rpcUrl: process.env.RPC_URL || 'http://127.0.0.1:8545',
+  registryAddress: process.env.VAULT_REGISTRY_ADDRESS || ''
 };
 
 function getConfig(): NodeConfig {
@@ -134,26 +140,26 @@ function getConfig(): NodeConfig {
     console.log('[Config] Looking for config.json at:', configJsonPath);
     console.log('[Config] File exists?', fs.existsSync(configJsonPath));
     
+    // NOTE: We no longer create or manage config.json here
+    // bytecave-core will create and manage config.json with all fields
+    // Desktop app just reads it for display purposes
     if (fs.existsSync(configJsonPath)) {
       const data = fs.readFileSync(configJsonPath, 'utf8');
       const persistedConfig = JSON.parse(data);
       
-      console.log('[Config] Found config.json with maxStorageMB:', persistedConfig.maxStorageMB);
-      console.log('[Config] Found config.json with bootstrap peers:', persistedConfig.p2pBootstrapPeers?.length || 0);
+      console.log('[Config] Found config.json created by bytecave-core');
+      console.log('[Config] maxStorageMB:', persistedConfig.maxStorageMB);
+      console.log('[Config] bootstrap peers:', persistedConfig.p2pBootstrapPeers?.length || 0);
       
-      // Replace ALL settings from config.json (it's the source of truth)
-      const beforeMerge = config.maxStorageMB;
+      // Merge with persisted config for display
       config = {
         ...config,
         ...persistedConfig,
         // Ensure these critical paths stay correct
         dataDir: config.dataDir
       };
-      console.log('[Config] After merge - maxStorageMB changed from', beforeMerge, 'to', config.maxStorageMB);
-      
-      console.log('[Config] Final config - bootstrap peers:', config.p2pBootstrapPeers?.length || 0, 'maxStorageMB:', config.maxStorageMB);
     } else {
-      console.log('[Config] config.json does not exist at', configJsonPath);
+      console.log('[Config] config.json does not exist yet - will be created by bytecave-core on first start');
     }
   } catch (error) {
     console.warn('[Config] Failed to load config.json:', error);
@@ -269,7 +275,9 @@ async function startNode(): Promise<void> {
     SHARD_COUNT: String(config.shardCount),
     NODE_SHARDS: JSON.stringify(config.nodeShards),
     OWNER_ADDRESS: config.ownerAddress || '',
-    PUBLIC_KEY: config.publicKey || ''
+    PUBLIC_KEY: config.publicKey || '',
+    RPC_URL: config.rpcUrl || '',
+    VAULT_REGISTRY_ADDRESS: config.registryAddress || ''
   };
 
   console.log(`Starting bytecave-core from: ${corePath}`);

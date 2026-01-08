@@ -139,6 +139,10 @@ interface NodeConfig {
   allowedApps?: string[];
   requireAppRegistry?: boolean;
   
+  // Contract Integration
+  rpcUrl?: string;
+  registryAddress?: string;
+  
   // Performance
   cacheSizeMB?: number;
   compressionEnabled?: boolean;
@@ -976,6 +980,31 @@ function App() {
                 className="input"
               />
               <small className="setting-hint">Maximum total storage in GB (default: 100 GB)</small>
+            </div>
+
+            {/* Contract Integration */}
+            <h3 style={{ marginTop: '24px', marginBottom: '16px', color: '#a78bfa' }}>⛓️ Contract Integration</h3>
+            <div className="setting-group">
+              <label>RPC URL</label>
+              <input 
+                type="text" 
+                value={config.rpcUrl ?? 'http://127.0.0.1:8545'} 
+                onChange={(e) => setConfig({ ...config, rpcUrl: e.target.value })}
+                className="input"
+                placeholder="http://127.0.0.1:8545"
+              />
+              <small className="setting-hint">Ethereum RPC endpoint for on-chain registry access</small>
+            </div>
+            <div className="setting-group">
+              <label>Vault Registry Address</label>
+              <input 
+                type="text" 
+                value={config.registryAddress ?? ''} 
+                onChange={(e) => setConfig({ ...config, registryAddress: e.target.value })}
+                className="input"
+                placeholder="0x..."
+              />
+              <small className="setting-hint">Contract address for VaultNodeRegistry (required for peer registration checking)</small>
             </div>
 
             {/* Replication Configuration */}
