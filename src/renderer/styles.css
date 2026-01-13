@@ -30,6 +30,9 @@ body {
   background: rgba(0, 0, 0, 0.2);
   border-bottom: 1px solid rgba(0, 255, 255, 0.1);
   -webkit-app-region: drag;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 /* Spacer for macOS traffic lights */
@@ -91,6 +94,9 @@ body {
   padding: 0 24px;
   background: rgba(0, 0, 0, 0.1);
   border-bottom: 1px solid rgba(0, 255, 255, 0.1);
+  position: sticky;
+  top: 73px;
+  z-index: 99;
 }
 
 .tab {
@@ -267,6 +273,12 @@ body {
   color: #ff4444;
 }
 
+.health-banner.outdated {
+  background: rgba(255, 200, 0, 0.1);
+  border: 1px solid rgba(255, 200, 0, 0.3);
+  color: #ffc800;
+}
+
 .health-icon {
   font-size: 20px;
 }
@@ -281,7 +293,16 @@ body {
   font-size: 12px;
   padding: 4px 10px;
   background: rgba(0, 0, 0, 0.3);
-  border-radius: 20px;
+  border-radius: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.min-version-badge {
+  font-size: 12px;
+  padding: 4px 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
   font-weight: 500;
   letter-spacing: 0;
 }

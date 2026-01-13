@@ -7,6 +7,7 @@ Desktop application for managing ByteCave storage nodes with an intuitive GUI. B
 - **Node Management** - Start/stop storage nodes with one click
 - **Configuration UI** - Easy setup for P2P, storage, and blockchain settings
 - **Real-time Monitoring** - View node status, peers, and storage metrics
+- **WebRTC Support** - Direct browser-to-node P2P connections (no HTTP required)
 - **Multi-Node Support** - Run multiple nodes with different configurations
 - **Integrated Logs** - View node logs directly in the app
 - **Tray Integration** - Minimize to system tray for background operation

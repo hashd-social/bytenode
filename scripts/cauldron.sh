@@ -17,9 +17,9 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
 
 # Create separate user data directories for each instance
-mkdir -p "$PROJECT_DIR/test-data/bat-1"
-mkdir -p "$PROJECT_DIR/test-data/bat-2"
-mkdir -p "$PROJECT_DIR/test-data/bat-3"
+mkdir -p "$PROJECT_DIR/test-data/bat-alpha"
+mkdir -p "$PROJECT_DIR/test-data/bat-beta"
+mkdir -p "$PROJECT_DIR/test-data/bat-gamma"
 mkdir -p "$PROJECT_DIR/test-data/logs"
 
 # Clear old logs
@@ -53,18 +53,13 @@ if [ -z "$RELAY_PEER" ]; then
     if [ ! -z "$RELAY_CONTAINER" ]; then
         RELAY_PEER_ID=$(docker logs "$RELAY_CONTAINER" 2>&1 | grep "Peer ID:" | head -1 | awk '{print $NF}')
         if [ ! -z "$RELAY_PEER_ID" ]; then
-            RELAY_PEER="/ip4/127.0.0.1/tcp/4001/p2p/$RELAY_PEER_ID"
+            RELAY_PEER="/ip4/127.0.0.1/tcp/4002/ws/p2p/$RELAY_PEER_ID"
             echo "✓ Detected relay: $RELAY_PEER"
         else
-            echo "⚠️  Could not detect relay peer ID"
-            echo "   Make sure bytecave-relay Docker container is running"
-            echo "   Run: docker logs $RELAY_CONTAINER"
-            exit 1
+            echo "⚠️  Could not detect relay peer ID from container"
         fi
     else
-        echo "ERROR: bytecave-relay Docker container not running"
-        echo "Start it with: ./start-all.sh or manually start the relay"
-        exit 1
+        echo "⚠️  Relay container not running - will use cached bootstrap peers if available"
     fi
 fi
 
@@ -82,7 +77,8 @@ BYTENODE_RELAY_PEERS="$RELAY_PEER" \
 NODE_URL="http://localhost:5001" \
 RPC_URL="$RPC_URL" \
 VAULT_REGISTRY_ADDRESS="$VAULT_REGISTRY_ADDRESS" \
-"$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-1" > "$PROJECT_DIR/test-data/logs/bat-alpha.log" 2>&1 &
+OWNER_ADDRESS="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" \
+"$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-alpha" > "$PROJECT_DIR/test-data/logs/bat-alpha.log" 2>&1 &
 PID1=$!
 sleep 2
 
@@ -95,7 +91,8 @@ BYTENODE_RELAY_PEERS="$RELAY_PEER" \
 NODE_URL="http://localhost:5002" \
 RPC_URL="$RPC_URL" \
 VAULT_REGISTRY_ADDRESS="$VAULT_REGISTRY_ADDRESS" \
-"$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-2" > "$PROJECT_DIR/test-data/logs/bat-beta.log" 2>&1 &
+OWNER_ADDRESS="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" \
+"$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-beta" > "$PROJECT_DIR/test-data/logs/bat-beta.log" 2>&1 &
 PID2=$!
 sleep 2
 
@@ -108,7 +105,8 @@ BYTENODE_RELAY_PEERS="$RELAY_PEER" \
 NODE_URL="http://localhost:5003" \
 RPC_URL="$RPC_URL" \
 VAULT_REGISTRY_ADDRESS="$VAULT_REGISTRY_ADDRESS" \
-"$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-3" > "$PROJECT_DIR/test-data/logs/bat-gamma.log" 2>&1 &
+OWNER_ADDRESS="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" \
+"$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-gamma" > "$PROJECT_DIR/test-data/logs/bat-gamma.log" 2>&1 &
 PID3=$!
 
 echo ""

@@ -102,6 +102,7 @@ const defaultConfig: NodeConfig = {
   nodeId: envNodeId,
   dataDir: envDataDir,
   port: envPort,
+  ownerAddress: process.env.OWNER_ADDRESS || '',
   p2pEnabled: true,
   p2pListenAddresses: [
     `/ip4/0.0.0.0/tcp/${envP2pPorts[0]}`,
@@ -582,36 +583,47 @@ ipcMain.handle('peer:connect', async (_event, multiaddr: string) => {
   }
 });
 
-// Node Policy IPC Handlers
+// Node Policy IPC Handlers - Read/write directly to config.json like other settings
 ipcMain.handle('policy:get-blocked-content', async () => {
   const config = getConfig();
-  const blockedContentPath = path.join(config.dataDir, 'config', 'blocked-content.json');
+  const configJsonPath = path.join(config.dataDir, 'config.json');
+  
   try {
     const fs = await import('fs/promises');
-    const content = await fs.readFile(blockedContentPath, 'utf-8');
-    return JSON.parse(content);
+    const content = await fs.readFile(configJsonPath, 'utf-8');
+    const configData = JSON.parse(content);
+    
+    return {
+      version: 1,
+      updatedAt: configData.lastUpdated || Date.now(),
+      cids: configData.blockedCids || [],
+      peerIds: configData.blockedPeerIds || []
+    };
   } catch (error: any) {
-    if (error.code === 'ENOENT') {
-      return { version: 1, updatedAt: Date.now(), cids: [], peerIds: [] };
-    }
-    throw error;
+    return { version: 1, updatedAt: Date.now(), cids: [], peerIds: [] };
   }
 });
 
 ipcMain.handle('policy:block-cid', async (_event, cid: string) => {
   const config = getConfig();
-  const blockedContentPath = path.join(config.dataDir, 'config', 'blocked-content.json');
+  const configJsonPath = path.join(config.dataDir, 'config.json');
   const fs = await import('fs/promises');
   
   try {
-    const content = await fs.readFile(blockedContentPath, 'utf-8').catch(() => '{"version":1,"updatedAt":0,"cids":[],"peerIds":[]}');
-    const blocked = JSON.parse(content);
-    if (!blocked.cids.includes(cid.toLowerCase())) {
-      blocked.cids.push(cid.toLowerCase());
-      blocked.updatedAt = Date.now();
-      await fs.mkdir(path.dirname(blockedContentPath), { recursive: true });
-      await fs.writeFile(blockedContentPath, JSON.stringify(blocked, null, 2));
+    const content = await fs.readFile(configJsonPath, 'utf-8');
+    const configData = JSON.parse(content);
+    
+    if (!configData.blockedCids) {
+      configData.blockedCids = [];
     }
+    
+    const cidLower = cid.toLowerCase();
+    if (!configData.blockedCids.includes(cidLower)) {
+      configData.blockedCids.push(cidLower);
+      configData.lastUpdated = Date.now();
+      await fs.writeFile(configJsonPath, JSON.stringify(configData, null, 2));
+    }
+    
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
@@ -620,18 +632,23 @@ ipcMain.handle('policy:block-cid', async (_event, cid: string) => {
 
 ipcMain.handle('policy:unblock-cid', async (_event, cid: string) => {
   const config = getConfig();
-  const blockedContentPath = path.join(config.dataDir, 'config', 'blocked-content.json');
+  const configJsonPath = path.join(config.dataDir, 'config.json');
   const fs = await import('fs/promises');
   
   try {
-    const content = await fs.readFile(blockedContentPath, 'utf-8');
-    const blocked = JSON.parse(content);
-    const index = blocked.cids.indexOf(cid.toLowerCase());
-    if (index > -1) {
-      blocked.cids.splice(index, 1);
-      blocked.updatedAt = Date.now();
-      await fs.writeFile(blockedContentPath, JSON.stringify(blocked, null, 2));
+    const content = await fs.readFile(configJsonPath, 'utf-8');
+    const configData = JSON.parse(content);
+    
+    if (configData.blockedCids) {
+      const cidLower = cid.toLowerCase();
+      const index = configData.blockedCids.indexOf(cidLower);
+      if (index > -1) {
+        configData.blockedCids.splice(index, 1);
+        configData.lastUpdated = Date.now();
+        await fs.writeFile(configJsonPath, JSON.stringify(configData, null, 2));
+      }
     }
+    
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
@@ -640,18 +657,23 @@ ipcMain.handle('policy:unblock-cid', async (_event, cid: string) => {
 
 ipcMain.handle('policy:block-peer', async (_event, peerId: string) => {
   const config = getConfig();
-  const blockedContentPath = path.join(config.dataDir, 'config', 'blocked-content.json');
+  const configJsonPath = path.join(config.dataDir, 'config.json');
   const fs = await import('fs/promises');
   
   try {
-    const content = await fs.readFile(blockedContentPath, 'utf-8').catch(() => '{"version":1,"updatedAt":0,"cids":[],"peerIds":[]}');
-    const blocked = JSON.parse(content);
-    if (!blocked.peerIds.includes(peerId)) {
-      blocked.peerIds.push(peerId);
-      blocked.updatedAt = Date.now();
-      await fs.mkdir(path.dirname(blockedContentPath), { recursive: true });
-      await fs.writeFile(blockedContentPath, JSON.stringify(blocked, null, 2));
+    const content = await fs.readFile(configJsonPath, 'utf-8');
+    const configData = JSON.parse(content);
+    
+    if (!configData.blockedPeerIds) {
+      configData.blockedPeerIds = [];
     }
+    
+    if (!configData.blockedPeerIds.includes(peerId)) {
+      configData.blockedPeerIds.push(peerId);
+      configData.lastUpdated = Date.now();
+      await fs.writeFile(configJsonPath, JSON.stringify(configData, null, 2));
+    }
+    
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };
@@ -660,18 +682,22 @@ ipcMain.handle('policy:block-peer', async (_event, peerId: string) => {
 
 ipcMain.handle('policy:unblock-peer', async (_event, peerId: string) => {
   const config = getConfig();
-  const blockedContentPath = path.join(config.dataDir, 'config', 'blocked-content.json');
+  const configJsonPath = path.join(config.dataDir, 'config.json');
   const fs = await import('fs/promises');
   
   try {
-    const content = await fs.readFile(blockedContentPath, 'utf-8');
-    const blocked = JSON.parse(content);
-    const index = blocked.peerIds.indexOf(peerId);
-    if (index > -1) {
-      blocked.peerIds.splice(index, 1);
-      blocked.updatedAt = Date.now();
-      await fs.writeFile(blockedContentPath, JSON.stringify(blocked, null, 2));
+    const content = await fs.readFile(configJsonPath, 'utf-8');
+    const configData = JSON.parse(content);
+    
+    if (configData.blockedPeerIds) {
+      const index = configData.blockedPeerIds.indexOf(peerId);
+      if (index > -1) {
+        configData.blockedPeerIds.splice(index, 1);
+        configData.lastUpdated = Date.now();
+        await fs.writeFile(configJsonPath, JSON.stringify(configData, null, 2));
+      }
     }
+    
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };

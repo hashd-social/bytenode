@@ -44,15 +44,18 @@ declare global {
 
 interface NodeStatus {
   running: boolean;
-  status?: 'healthy' | 'degraded' | 'unhealthy';
+  status?: 'healthy' | 'degraded' | 'unhealthy' | 'outdated';
   version?: string;
+  minVersion?: string;
   peerId?: string;
   publicKey?: string;
   ownerAddress?: string;
+  registeredOnChain?: boolean;
+  onChainNodeId?: string;
   peers?: number;
   p2p?: {
     connected: number;
-    replicating: number;
+    registered: number;
     relay: number;
   };
   connectedPeers?: number;
@@ -290,8 +293,9 @@ function App() {
     return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
   };
 
-  const formatUptime = (ms: number) => {
-    const seconds = Math.floor(ms / 1000);
+  const formatUptime = (uptimeSeconds: number) => {
+
+    const seconds = Math.floor(uptimeSeconds);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
@@ -376,14 +380,42 @@ function App() {
               <>
                 {/* Health Status Banner */}
                 <div className={`health-banner ${status.status || 'healthy'}`}>
-                  <span className="health-icon">{status.status === 'healthy' ? '✓' : status.status === 'degraded' ? '⚠' : '✗'}</span>
-                  <span className="health-text">{(status.status || 'healthy').toUpperCase()}</span>
+                  <span className="health-icon">
+                    {status.status === 'healthy' ? '✓' : 
+                     status.status === 'degraded' ? '⚠' : 
+                     status.status === 'outdated' ? '⚠' : '✗'}
+                  </span>
+                  <span className="health-text">
+                    {(status.status || 'healthy').toUpperCase()}
+                  </span>
                   {status.version && <span className="version-badge">v{status.version}</span>}
+                  {status.status === 'outdated' && status.minVersion && (
+                    <span className="min-version-badge">Required: v{status.minVersion}</span>
+                  )}
                 </div>
 
                 {/* Identity Section */}
                 <div className="section-header">Identity</div>
                 <div className="stats-grid">
+                  <div className="stat-card full-width">
+                    <div className="stat-label">Node ID</div>
+                    <div className="stat-value mono">{config?.nodeId || 'N/A'}</div>
+                  </div>
+                  <div className="stat-card full-width">
+                    <div className="stat-label">On-Chain Registration</div>
+                    <div className="stat-value">
+                      {status.registeredOnChain ? (
+                        <span style={{ color: '#4ade80' }}>✓ Registered</span>
+                      ) : (
+                        <span style={{ color: '#f87171' }}>✗ Not Registered</span>
+                      )}
+                      {status.onChainNodeId && (
+                        <div style={{ fontSize: '0.8em', marginTop: '4px', opacity: 0.7 }}>
+                          {status.onChainNodeId.slice(0, 16)}...
+                        </div>
+                      )}
+                    </div>
+                  </div>
                   <div className="stat-card full-width">
                     <div className="stat-label">Peer ID</div>
                     <div className="stat-value mono copyable" onClick={() => {
@@ -427,7 +459,7 @@ function App() {
                       {status.p2p ? (
                         <div style={{ fontSize: '0.9em', lineHeight: '1.6' }}>
                           <div><strong>{status.p2p.connected}</strong> connected</div>
-                          <div><strong>{status.p2p.replicating}</strong> replicating</div>
+                          <div><strong>{status.p2p.registered}</strong> registered</div>
                         </div>
                       ) : (
                         peers.length
