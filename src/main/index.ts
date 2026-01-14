@@ -25,6 +25,7 @@ interface NodeConfig {
   
   // Identity
   ownerAddress?: string;
+  walletPrivateKey?: string;
   publicKey?: string;
   
   // P2P Configuration
@@ -104,6 +105,7 @@ const defaultConfig: NodeConfig = {
   dataDir: envDataDir,
   port: envPort,
   ownerAddress: process.env.OWNER_ADDRESS || '',
+  walletPrivateKey: process.env.WALLET_PRIVATE_KEY || process.env.PRIVATE_KEY || '',
   p2pEnabled: true,
   p2pListenAddresses: [
     `/ip4/0.0.0.0/tcp/${envP2pPorts[0]}`,
@@ -277,6 +279,7 @@ async function startNode(): Promise<void> {
     SHARD_COUNT: String(config.shardCount),
     NODE_SHARDS: JSON.stringify(config.nodeShards),
     OWNER_ADDRESS: config.ownerAddress || '',
+    PRIVATE_KEY: config.walletPrivateKey || '',
     PUBLIC_KEY: config.publicKey || '',
     RPC_URL: config.rpcUrl || '',
     VAULT_REGISTRY_ADDRESS: config.registryAddress || ''
@@ -664,16 +667,57 @@ ipcMain.handle('node:deregister', async () => {
   const config = getConfig();
   
   try {
-    // Get public key from health endpoint to calculate nodeId
+    // Get peer ID from health endpoint
     const healthResponse = await fetch(`http://localhost:${config.port}/health`);
     const health = await healthResponse.json();
-    const publicKey = health.publicKey;
+    const peerId = health.peerId;
     
-    if (!publicKey) {
-      return { success: false, error: 'Could not get public key from node' };
+    if (!peerId) {
+      return { success: false, error: 'Could not get peer ID from node' };
     }
     
-    // Calculate nodeId from public key
+    // Extract public key from peer ID (same logic as registration)
+    const { peerIdFromString } = await import('@libp2p/peer-id');
+    const peerIdObj = peerIdFromString(peerId);
+    
+    if (!peerIdObj.publicKey) {
+      return { success: false, error: 'Could not extract public key from peer ID' };
+    }
+    
+    const publicKeyProto = (peerIdObj.publicKey as any).raw;
+    if (!publicKeyProto) {
+      return { success: false, error: 'Could not get public key from peer ID' };
+    }
+    
+    const protoBuffer = Buffer.from(publicKeyProto);
+    
+    // Extract the actual key bytes (same logic as registration)
+    let keyBytes: Buffer;
+    if (protoBuffer.length === 33 || protoBuffer.length === 65) {
+      keyBytes = protoBuffer;
+    } else if (protoBuffer.length === 36) {
+      keyBytes = protoBuffer.slice(3);
+    } else if (protoBuffer.length === 68) {
+      keyBytes = protoBuffer.slice(3);
+    } else {
+      let found = false;
+      for (let i = 0; i < protoBuffer.length - 33; i++) {
+        if (protoBuffer[i] === 0x02 || protoBuffer[i] === 0x03) {
+          keyBytes = protoBuffer.slice(i, i + 33);
+          found = true;
+          break;
+        } else if (protoBuffer[i] === 0x04 && protoBuffer.length >= i + 65) {
+          keyBytes = protoBuffer.slice(i, i + 65);
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        return { success: false, error: `Could not extract key from protobuf (length: ${protoBuffer.length})` };
+      }
+    }
+    
+    const publicKey = '0x' + keyBytes!.toString('hex');
     const nodeId = ethers.keccak256(publicKey);
     
     // Check if we have RPC URL and registry address
@@ -696,9 +740,22 @@ ipcMain.handle('node:deregister', async () => {
     const wallet = new ethers.Wallet(privateKey, provider);
     
     const registryAbi = [
-      'function deregisterNode(bytes32 nodeId) external'
+      'function deregisterNode(bytes32 nodeId) external',
+      'function getNode(bytes32 nodeId) external view returns (tuple(address owner, bytes publicKey, string peerId, bytes32 metadataHash, uint256 registeredAt, bool active))'
     ];
     const registry = new ethers.Contract(registryAddress, registryAbi, wallet);
+    
+    // Check if node is actually registered on-chain
+    try {
+      const node = await registry.getNode(nodeId);
+      if (node.owner === ethers.ZeroAddress) {
+        console.log('[IPC] Node is not registered on-chain, skipping deregistration');
+        return { success: true, message: 'Node is not registered on-chain, no deregistration needed' };
+      }
+    } catch (error) {
+      console.log('[IPC] Node not found on-chain, skipping deregistration');
+      return { success: true, message: 'Node is not registered on-chain, no deregistration needed' };
+    }
     
     console.log('[IPC] Deregistering node from chain...', {
       nodeId: nodeId.slice(0, 16) + '...'
@@ -761,6 +818,7 @@ ipcMain.handle('config:set', async (_event, newConfig: Partial<NodeConfig>) => {
     if (newConfig.shardCount !== undefined) persistedConfig.shardCount = newConfig.shardCount;
     if (newConfig.nodeShards !== undefined) persistedConfig.nodeShards = newConfig.nodeShards;
     if (newConfig.ownerAddress !== undefined) persistedConfig.ownerAddress = newConfig.ownerAddress;
+    if (newConfig.walletPrivateKey !== undefined) persistedConfig.walletPrivateKey = newConfig.walletPrivateKey;
     if (newConfig.publicKey !== undefined) persistedConfig.publicKey = newConfig.publicKey;
     
     // Garbage Collection

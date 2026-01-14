@@ -49,6 +49,7 @@ interface NodeStatus {
   minVersion?: string;
   peerId?: string;
   publicKey?: string;
+  secp256k1PublicKey?: string;
   ownerAddress?: string;
   registeredOnChain?: boolean;
   onChainNodeId?: string;
@@ -104,6 +105,7 @@ interface NodeConfig {
   
   // Identity
   ownerAddress?: string;
+  walletPrivateKey?: string;
   publicKey?: string;
   
   // P2P Configuration
@@ -495,15 +497,28 @@ function App() {
                     </div>
                   </div>
                   <div className="stat-card full-width">
-                    <div className="stat-label">Public Key (for contract registration)</div>
+                    <div className="stat-label">secp256k1 Public Key (for contract registration)</div>
+                    <div className="stat-value mono copyable" onClick={() => {
+                      if (status.secp256k1PublicKey) {
+                        navigator.clipboard.writeText(status.secp256k1PublicKey);
+                        alert('secp256k1 public key copied to clipboard!');
+                      }
+                    }}>
+                      {status.secp256k1PublicKey || 'N/A (node not started)'}
+                    </div>
+                    <div className="stat-hint">33 bytes compressed - use this for on-chain node registration</div>
+                  </div>
+                  <div className="stat-card full-width">
+                    <div className="stat-label">Ed25519 Public Key (for storage proofs)</div>
                     <div className="stat-value mono copyable" onClick={() => {
                       if (status.publicKey) {
                         navigator.clipboard.writeText(`0x${status.publicKey}`);
-                        alert('Public key copied to clipboard!');
+                        alert('Ed25519 public key copied to clipboard!');
                       }
                     }}>
                       {status.publicKey ? `0x${status.publicKey}` : 'N/A'}
                     </div>
+                    <div className="stat-hint">44 bytes DER-encoded - used for libp2p identity and proof signing</div>
                   </div>
                   {status.ownerAddress && (
                     <div className="stat-card full-width">
@@ -865,15 +880,30 @@ function App() {
               <small className="setting-hint">Your Ethereum address for on-chain registration</small>
             </div>
             <div className="setting-group">
-              <label>Public Key</label>
+              <label>Wallet Private Key (Optional)</label>
+              <input 
+                type="password" 
+                value={config.walletPrivateKey || ''} 
+                onChange={(e) => setConfig({ ...config, walletPrivateKey: e.target.value })}
+                placeholder="0x..."
+                className="input"
+              />
+              <small className="setting-hint" style={{ color: '#fbbf24' }}>
+                ⚠️ Required for registration/deregistration. Use a fresh wallet with only HASHD tokens for security. 
+                Your private key never leaves your computer.
+              </small>
+            </div>
+            <div className="setting-group">
+              <label>Node Identity Hash (Internal Use)</label>
               <input 
                 type="text" 
                 value={config.publicKey || ''} 
                 readOnly
-                placeholder="Generated automatically on first start..."
+                placeholder="Auto-generated from node ID..."
                 className="input"
+                style={{ opacity: 0.6 }}
               />
-              <small className="setting-hint">Node's public key (auto-generated on first start)</small>
+              <small className="setting-hint">Auto-generated hash used internally - NOT for contract registration. Use secp256k1 key from Status tab instead.</small>
             </div>
             <div className="setting-group">
               <label>Relay Nodes (for NAT traversal)</label>

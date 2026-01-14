@@ -5,8 +5,10 @@ Desktop application for managing ByteCave storage nodes with an intuitive GUI. B
 ## Features
 
 - **Node Management** - Start/stop storage nodes with one click
+- **On-Chain Registration** - Register nodes on blockchain with stake management
+- **Deregistration** - Deregister nodes and recover staked tokens
 - **Configuration UI** - Easy setup for P2P, storage, and blockchain settings
-- **Real-time Monitoring** - View node status, peers, and storage metrics
+- **Real-time Monitoring** - View node status, peers, storage metrics, and registration status
 - **WebRTC Support** - Direct browser-to-node P2P connections (no HTTP required)
 - **Multi-Node Support** - Run multiple nodes with different configurations
 - **Integrated Logs** - View node logs directly in the app
@@ -37,6 +39,17 @@ yarn build
 yarn package
 ```
 
+## Cryptographic Keys
+
+ByteCave nodes use **two different public keys** displayed in the Status tab:
+
+1. **secp256k1 Public Key** (33 bytes) - Use this for on-chain node registration
+2. **Ed25519 Public Key** (44 bytes) - Auto-managed for storage proofs
+
+**Important:** When registering your node, always use the **secp256k1 public key**.
+
+For detailed information about the different keys, their purposes, and when to use each, see the [bytecave-core README](../bytecave-core/README.md#cryptographic-keys).
+
 ## Quick Start
 
 ### 1. Launch Application
@@ -64,10 +77,52 @@ Click **Settings** tab and configure:
 
 **Blockchain:**
 - Owner wallet address
+- Wallet private key (for registration/deregistration)
 - Vault registry contract address
+- HASHD token contract address
 - RPC URL
 
-### 3. Start Node
+**⚠️ Wallet Private Key Security:**
+- **Use a fresh wallet** dedicated only to this node
+- **Do NOT use a wallet** that contains other tokens or significant balances
+- The wallet private key is required for on-chain registration/deregistration
+- Your private key **NEVER leaves your computer**
+- It is only used locally to sign blockchain transactions
+- Store it securely in the settings or `.env` file
+
+### 3. Configure Wallet Private Key (For Registration)
+
+**Security Best Practices:**
+
+1. **Create a Fresh Wallet**
+   - Generate a new Ethereum wallet specifically for this node
+   - Do NOT reuse an existing wallet with other assets
+   - Only fund it with HASHD tokens needed for staking
+
+2. **Add Wallet Private Key to Settings**
+   - Go to Settings tab
+   - Enter your wallet address in "Owner Wallet Address"
+   - Enter your private key in "Wallet Private Key" field (shown as password)
+   - Click "Save Configuration"
+
+3. **Alternative: Use .env File**
+   - Copy `.env.example` to `.env`
+   - Set `OWNER_ADDRESS=0x...`
+   - Set `WALLET_PRIVATE_KEY=0x...`
+   - Restart the application
+
+**Important:** Your private key is stored locally in `config.json` or `.env` and never transmitted over the network.
+
+### 4. Register Node (Optional)
+
+If you want to register your node on-chain:
+1. Configure wallet private key (see above)
+2. Configure contract addresses (Registry, HASHD Token, RPC URL)
+3. Ensure wallet has 1000+ HASHD tokens
+4. Click **Register** button
+5. Node will stake 1000 HASHD and register on blockchain
+
+### 5. Start Node
 
 Click **Start Node** button. The node will:
 1. Initialize P2P networking
@@ -75,14 +130,22 @@ Click **Start Node** button. The node will:
 3. Discover other nodes
 4. Start accepting storage requests
 
-### 4. Monitor Status
+### 6. Monitor Status
 
 View real-time metrics:
 - Connection status
+- Registration status (on-chain or off-chain)
 - Connected peers
 - Stored blobs
 - Storage usage
 - Node health
+
+### 7. Deregister Node (Optional)
+
+To deregister and recover staked tokens:
+1. Stop the node if running
+2. Click **Deregister** button
+3. Staked HASHD tokens will be returned to wallet
 
 ## Configuration
 
@@ -168,8 +231,15 @@ Your Ethereum wallet address.
 
 **Blockchain Settings:**
 - Owner Address - Your wallet address
+- Private Key - Wallet private key (required for registration)
 - Vault Registry - Contract address
+- HASHD Token - HASHD token contract address
 - RPC URL - Ethereum RPC endpoint
+
+**Registration:**
+- Register - Register node on blockchain (stakes 1000 HASHD)
+- Deregister - Deregister node and recover staked tokens
+- Status - Shows if node is registered on-chain
 
 ### Logs Tab
 
@@ -376,6 +446,39 @@ Disable auto-update in settings if needed.
 ## License
 
 MIT
+
+## On-Chain Registration
+
+### Registration Process
+
+1. **Configure Wallet**
+   - Set private key in settings
+   - Ensure wallet has 1000+ HASHD tokens
+   - Set contract addresses (Vault Registry, HASHD Token)
+
+2. **Register Node**
+   - Click "Register" button
+   - Node extracts public key from peer ID
+   - Stakes 1000 HASHD tokens
+   - Registers on VaultNodeRegistry contract
+
+3. **Monitor Status**
+   - Dashboard shows "Registered on-chain" status
+   - View staked amount and registration details
+
+### Deregistration Process
+
+1. **Stop Node** (optional but recommended)
+2. **Click Deregister**
+   - Node calculates nodeId from peer ID
+   - Calls deregisterNode on contract
+   - Staked HASHD returned to wallet
+
+3. **Verify**
+   - Status changes to "Not registered"
+   - Check wallet for returned HASHD
+
+**Note:** Registration and deregistration require the same wallet that owns the node.
 
 ## Related Packages
 
