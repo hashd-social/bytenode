@@ -27,6 +27,8 @@ declare global {
         stop: () => Promise<{ success: boolean }>;
         status: () => Promise<NodeStatus>;
         peers: () => Promise<PeerInfo[]>;
+        register: () => Promise<{ success: boolean; error?: string }>;
+        deregister: () => Promise<{ success: boolean; error?: string }>;
         onStarted: (callback: (data: StartedData) => void) => void;
         onStopped: (callback: () => void) => void;
         onPeerConnect: (callback: (peerId: string) => void) => void;

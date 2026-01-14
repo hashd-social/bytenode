@@ -286,6 +286,48 @@ function App() {
     setLoading(false);
   };
 
+  const handleRegister = async () => {
+    if (!confirm('Register this node on-chain?')) {
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const result = await window.bytecave.node.register();
+      if (result.success) {
+        alert('✅ Node registered successfully!');
+        await loadStatus();
+      } else {
+        alert(`❌ Registration failed: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error: any) {
+      alert(`❌ Registration failed: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeregister = async () => {
+    if (!confirm('Deregister this node from the contract? Your stake will be returned.')) {
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const result = await window.bytecave.node.deregister();
+      if (result.success) {
+        alert('✅ Node deregistered successfully! Stake returned.');
+        await loadStatus();
+      } else {
+        alert(`❌ Deregistration failed: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error: any) {
+      alert(`❌ Deregistration failed: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const formatBytes = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -404,16 +446,41 @@ function App() {
                   <div className="stat-card full-width">
                     <div className="stat-label">On-Chain Registration</div>
                     <div className="stat-value">
-                      {status.registeredOnChain ? (
-                        <span style={{ color: '#4ade80' }}>✓ Registered</span>
-                      ) : (
-                        <span style={{ color: '#f87171' }}>✗ Not Registered</span>
-                      )}
-                      {status.onChainNodeId && (
-                        <div style={{ fontSize: '0.8em', marginTop: '4px', opacity: 0.7 }}>
-                          {status.onChainNodeId.slice(0, 16)}...
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'space-between' }}>
+                        <div>
+                          {status.registeredOnChain ? (
+                            <span style={{ color: '#4ade80' }}>✓ Registered</span>
+                          ) : (
+                            <span style={{ color: '#f87171' }}>✗ Not Registered</span>
+                          )}
+                          {status.onChainNodeId && (
+                            <div style={{ fontSize: '0.8em', marginTop: '4px', opacity: 0.7 }}>
+                              {status.onChainNodeId.slice(0, 16)}...
+                            </div>
+                          )}
                         </div>
-                      )}
+                        {status.peerId && (
+                          <>
+                            {status.registeredOnChain ? (
+                              <button 
+                                className="btn btn-secondary"
+                                onClick={handleDeregister}
+                                style={{ fontSize: '0.85em', padding: '6px 12px' }}
+                              >
+                                Deregister
+                              </button>
+                            ) : (
+                              <button 
+                                className="btn btn-primary"
+                                onClick={handleRegister}
+                                style={{ fontSize: '0.85em', padding: '6px 12px' }}
+                              >
+                                Register
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="stat-card full-width">
@@ -476,22 +543,7 @@ function App() {
                   </div>
                 </div>
 
-                {/* P2P Multiaddrs */}
-                {status.multiaddrs && status.multiaddrs.length > 0 && (
-                  <>
-                    <div className="section-header">P2P Listen Addresses</div>
-                    <div className="multiaddr-list">
-                      {status.multiaddrs.map((addr, i) => (
-                        <div key={i} className="multiaddr-item mono copyable" onClick={() => {
-                          navigator.clipboard.writeText(addr);
-                          alert('Address copied!');
-                        }}>
-                          {addr}
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
+
 
                 {/* Storage Section */}
                 <div className="section-header">Storage</div>
@@ -569,6 +621,24 @@ function App() {
                     </div>
                   </>
                 )}
+
+
+                {/* P2P Multiaddrs */}
+                {status.multiaddrs && status.multiaddrs.length > 0 && (
+                  <>
+                    <div className="section-header">P2P Listen Addresses</div>
+                    <div className="multiaddr-list">
+                      {status.multiaddrs.map((addr, i) => (
+                        <div key={i} className="multiaddr-item mono copyable" onClick={() => {
+                          navigator.clipboard.writeText(addr);
+                          alert('Address copied!');
+                        }}>
+                          {addr}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}                
               </>
             )}
 

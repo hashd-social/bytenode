@@ -9,6 +9,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
 import Store from 'electron-store';
+import { ethers } from 'ethers';
 
 interface ShardRange {
   start: number;
@@ -465,6 +466,255 @@ ipcMain.handle('node:peers', async () => {
   } catch (error: any) {
     console.error('[IPC] Failed to fetch peers:', error.message);
     return [];
+  }
+});
+
+ipcMain.handle('node:register', async () => {
+  if (!nodeRunning) {
+    return { success: false, error: 'Node is not running' };
+  }
+  
+  const config = getConfig();
+  
+  try {
+    // Get peer ID from health endpoint
+    const healthResponse = await fetch(`http://localhost:${config.port}/health`);
+    const health = await healthResponse.json();
+    
+    const peerId = health.peerId;
+    
+    if (!peerId) {
+      return { success: false, error: 'Could not get peer ID from node' };
+    }
+    
+    // Get public key from P2P status endpoint (has raw libp2p public key)
+    const peersResponse = await fetch(`http://localhost:${config.port}/peers`);
+    const peersData = await peersResponse.json();
+    
+    // The node's own public key should be available from the P2P service
+    // We need to extract it from the peer ID using libp2p
+    // For now, we'll derive it from the peer ID which encodes the public key
+    
+    // PeerID format: base58(multihash(protobuf(publicKey)))
+    // We need to reverse this to get the raw public key
+    // The peerId contains the public key, we need to extract it
+    
+    // Import libp2p peer-id to extract public key
+    const { peerIdFromString } = await import('@libp2p/peer-id');
+    const peerIdObj = peerIdFromString(peerId);
+    
+    if (!peerIdObj.publicKey) {
+      return { success: false, error: 'Could not extract public key from peer ID' };
+    }
+    
+    // Get the protobuf-encoded public key
+    const publicKeyProto = (peerIdObj.publicKey as any).raw;
+    if (!publicKeyProto) {
+      return { success: false, error: 'Could not get public key from peer ID' };
+    }
+    
+    // For secp256k1 keys in libp2p protobuf format:
+    // The structure is: [protobuf header] + [key type byte] + [key length varint] + [actual key bytes]
+    // For a 33-byte compressed key, the protobuf is typically 36 bytes total
+    // We need to extract just the 33-byte key (skip the 3-byte header)
+    const protoBuffer = Buffer.from(publicKeyProto);
+    
+    console.log('[IPC] Public key proto length:', protoBuffer.length);
+    
+    // For secp256k1, skip the protobuf wrapper (typically 3-5 bytes at the start)
+    // The actual key starts after: type tag (1 byte) + key type (1 byte) + length varint (1+ bytes)
+    let keyBytes: Buffer;
+    if (protoBuffer.length === 33 || protoBuffer.length === 65) {
+      // Already just the key
+      keyBytes = protoBuffer;
+    } else if (protoBuffer.length === 36) {
+      // 3-byte header + 33-byte key (typical for compressed secp256k1)
+      keyBytes = protoBuffer.slice(3);
+    } else if (protoBuffer.length === 68) {
+      // 3-byte header + 65-byte key (uncompressed)
+      keyBytes = protoBuffer.slice(3);
+    } else {
+      // Try to find the key by looking for the 0x02 or 0x03 prefix (compressed) or 0x04 (uncompressed)
+      let found = false;
+      for (let i = 0; i < protoBuffer.length - 33; i++) {
+        if (protoBuffer[i] === 0x02 || protoBuffer[i] === 0x03) {
+          // Found compressed key prefix
+          keyBytes = protoBuffer.slice(i, i + 33);
+          found = true;
+          break;
+        } else if (protoBuffer[i] === 0x04 && protoBuffer.length >= i + 65) {
+          // Found uncompressed key prefix
+          keyBytes = protoBuffer.slice(i, i + 65);
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        return { success: false, error: `Could not extract key from protobuf (length: ${protoBuffer.length})` };
+      }
+    }
+    
+    console.log('[IPC] Extracted key length:', keyBytes!.length);
+    const publicKey = '0x' + keyBytes!.toString('hex');
+    
+    // Check if we have RPC URL and registry address
+    // Force IPv4 to avoid IPv6 connection issues
+    const rpcUrl = process.env.RPC_URL || 'http://127.0.0.1:8545';
+    const registryAddress = process.env.VAULT_REGISTRY_ADDRESS;
+    
+    console.log('[IPC] Registration config:', {
+      rpcUrl,
+      registryAddress: registryAddress?.slice(0, 10) + '...',
+      hasPrivateKey: !!process.env.PRIVATE_KEY
+    });
+    
+    if (!registryAddress) {
+      return { success: false, error: 'VAULT_REGISTRY_ADDRESS not configured' };
+    }
+    
+    // Check if we have private key from environment
+    const privateKey = process.env.PRIVATE_KEY;
+    if (!privateKey) {
+      return { success: false, error: 'No wallet private key configured (PRIVATE_KEY env var)' };
+    }
+    
+    // Connect to contract with explicit network config to avoid IPv6 issues
+    const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, {
+      staticNetwork: true,
+      batchMaxCount: 1
+    });
+    const wallet = new ethers.Wallet(privateKey, provider);
+    
+    // Get HASHD token contract
+    const hashdTokenAddress = process.env.HASHD_TOKEN || '0x7a2088a1bFc9d81c55368AE168C2C02570cB814F';
+    const hashdAbi = [
+      'function approve(address spender, uint256 amount) returns (bool)',
+      'function allowance(address owner, address spender) view returns (uint256)'
+    ];
+    const hashd = new ethers.Contract(hashdTokenAddress, hashdAbi, wallet);
+    
+    const registryAbi = [
+      'function registerNode(bytes publicKey, string peerId, bytes32 metadataHash, uint256 stakeAmount, bytes signature) returns (bytes32)',
+      'function getNodeByOwner(address owner) view returns (bytes32)'
+    ];
+    const registry = new ethers.Contract(registryAddress, registryAbi, wallet);
+    
+    // Create metadata hash
+    const metadata = {
+      version: '1.0.0',
+      capabilities: ['storage', 'replication'],
+      timestamp: Date.now()
+    };
+    const metadataHash = ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(metadata)));
+    
+    // Stake amount: 1000 HASHD tokens (minimum stake requirement)
+    const stakeAmount = ethers.parseEther('1000');
+    
+    // Check if we need to approve tokens
+    const currentAllowance = await hashd.allowance(wallet.address, registryAddress);
+    if (currentAllowance < stakeAmount) {
+      console.log('[IPC] Approving HASHD tokens for registry...');
+      const approveTx = await hashd.approve(registryAddress, stakeAmount);
+      await approveTx.wait();
+      console.log('[IPC] Token approval confirmed');
+      
+      // Wait a bit for the blockchain to update
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    // Empty signature (not enforced yet)
+    const emptySignature = '0x';
+    
+    console.log('[IPC] Registering node on-chain...', {
+      peerId: peerId.slice(0, 16) + '...',
+      publicKeyLength: publicKey.length,
+      stakeAmount: stakeAmount.toString()
+    });
+    
+    // Get fresh nonce to avoid nonce conflicts
+    const nonce = await provider.getTransactionCount(wallet.address, 'latest');
+    console.log('[IPC] Using nonce:', nonce);
+    
+    // Call registerNode with explicit nonce
+    const tx = await registry.registerNode(
+      publicKey,
+      peerId,
+      metadataHash,
+      stakeAmount,
+      emptySignature,
+      { nonce }
+    );
+    
+    console.log('[IPC] Transaction sent:', tx.hash);
+    const receipt = await tx.wait();
+    console.log('[IPC] Transaction confirmed:', receipt.hash);
+    
+    return { success: true, txHash: receipt.hash };
+  } catch (error: any) {
+    console.error('[IPC] Failed to register node:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('node:deregister', async () => {
+  if (!nodeRunning) {
+    return { success: false, error: 'Node is not running' };
+  }
+  
+  const config = getConfig();
+  
+  try {
+    // Get public key from health endpoint to calculate nodeId
+    const healthResponse = await fetch(`http://localhost:${config.port}/health`);
+    const health = await healthResponse.json();
+    const publicKey = health.publicKey;
+    
+    if (!publicKey) {
+      return { success: false, error: 'Could not get public key from node' };
+    }
+    
+    // Calculate nodeId from public key
+    const nodeId = ethers.keccak256(publicKey);
+    
+    // Check if we have RPC URL and registry address
+    // Force IPv4 to avoid IPv6 connection issues
+    const rpcUrl = process.env.RPC_URL || 'http://127.0.0.1:8545';
+    const registryAddress = process.env.VAULT_REGISTRY_ADDRESS;
+    
+    if (!registryAddress) {
+      return { success: false, error: 'VAULT_REGISTRY_ADDRESS not configured' };
+    }
+    
+    // Check if we have private key from environment
+    const privateKey = process.env.PRIVATE_KEY;
+    if (!privateKey) {
+      return { success: false, error: 'No wallet private key configured (PRIVATE_KEY env var)' };
+    }
+    
+    // Connect to contract
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    const wallet = new ethers.Wallet(privateKey, provider);
+    
+    const registryAbi = [
+      'function deregisterNode(bytes32 nodeId) external'
+    ];
+    const registry = new ethers.Contract(registryAddress, registryAbi, wallet);
+    
+    console.log('[IPC] Deregistering node from chain...', {
+      nodeId: nodeId.slice(0, 16) + '...'
+    });
+    
+    // Call deregisterNode
+    const tx = await registry.deregisterNode(nodeId);
+    
+    console.log('[IPC] Transaction sent:', tx.hash);
+    const receipt = await tx.wait();
+    console.log('[IPC] Transaction confirmed:', receipt.hash);
+    
+    return { success: true, txHash: receipt.hash };
+  } catch (error: any) {
+    console.error('[IPC] Failed to deregister node:', error);
+    return { success: false, error: error.message };
   }
 });
 

@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('bytecave', {
     stop: () => ipcRenderer.invoke('node:stop'),
     status: () => ipcRenderer.invoke('node:status'),
     peers: () => ipcRenderer.invoke('node:peers'),
+    register: () => ipcRenderer.invoke('node:register'),
+    deregister: () => ipcRenderer.invoke('node:deregister'),
     onStarted: (callback: (data: any) => void) => {
       ipcRenderer.on('node:started', (_event, data) => callback(data));
     },
@@ -22,6 +24,9 @@ contextBridge.exposeInMainWorld('bytecave', {
     },
     onPeerDisconnect: (callback: (peerId: string) => void) => {
       ipcRenderer.on('peer:disconnect', (_event, peerId) => callback(peerId));
+    },
+    onBroadcast: (callback: (data: any) => void) => {
+      ipcRenderer.on('broadcast:received', (_event, data) => callback(data));
     }
   },
   peer: {
