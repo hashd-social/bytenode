@@ -43,12 +43,12 @@ yarn package
 
 ByteCave nodes use **two different public keys** displayed in the Status tab:
 
-1. **secp256k1 Public Key** (33 bytes) - Use this for on-chain node registration
-2. **Ed25519 Public Key** (44 bytes) - Auto-managed for storage proofs
+1. **secp256k1 Public Key** (64 bytes uncompressed) - Use this for on-chain node registration
+2. **Ed25519 Public Key** (32 bytes) - Auto-managed for storage proofs
 
-**Important:** When registering your node, always use the **secp256k1 public key**.
+**Important:** When registering your node, always use the **secp256k1 public key** (64 bytes uncompressed format).
 
-For detailed information about the different keys, their purposes, and when to use each, see the [bytecave-core README](../bytecave-core/README.md#cryptographic-keys).
+For detailed information about the different keys, their purposes, security model, and when to use each, see the [bytecave-core README](../bytecave-core/README.md#cryptographic-keys--security-model).
 
 ## Quick Start
 

@@ -480,85 +480,25 @@ ipcMain.handle('node:register', async () => {
   const config = getConfig();
   
   try {
-    // Get peer ID from health endpoint
+    // Get peer ID and secp256k1 public key from health endpoint
     const healthResponse = await fetch(`http://localhost:${config.port}/health`);
     const health = await healthResponse.json();
     
     const peerId = health.peerId;
+    const secp256k1PublicKey = health.secp256k1PublicKey;
     
     if (!peerId) {
       return { success: false, error: 'Could not get peer ID from node' };
     }
     
-    // Get public key from P2P status endpoint (has raw libp2p public key)
-    const peersResponse = await fetch(`http://localhost:${config.port}/peers`);
-    const peersData = await peersResponse.json();
-    
-    // The node's own public key should be available from the P2P service
-    // We need to extract it from the peer ID using libp2p
-    // For now, we'll derive it from the peer ID which encodes the public key
-    
-    // PeerID format: base58(multihash(protobuf(publicKey)))
-    // We need to reverse this to get the raw public key
-    // The peerId contains the public key, we need to extract it
-    
-    // Import libp2p peer-id to extract public key
-    const { peerIdFromString } = await import('@libp2p/peer-id');
-    const peerIdObj = peerIdFromString(peerId);
-    
-    if (!peerIdObj.publicKey) {
-      return { success: false, error: 'Could not extract public key from peer ID' };
+    if (!secp256k1PublicKey) {
+      return { success: false, error: 'secp256k1 public key not available - node may not be using secp256k1' };
     }
     
-    // Get the protobuf-encoded public key
-    const publicKeyProto = (peerIdObj.publicKey as any).raw;
-    if (!publicKeyProto) {
-      return { success: false, error: 'Could not get public key from peer ID' };
-    }
+    console.log('[IPC] Got peer ID:', peerId.slice(0, 16) + '...');
+    console.log('[IPC] Got secp256k1 public key:', secp256k1PublicKey.slice(0, 20) + '...');
     
-    // For secp256k1 keys in libp2p protobuf format:
-    // The structure is: [protobuf header] + [key type byte] + [key length varint] + [actual key bytes]
-    // For a 33-byte compressed key, the protobuf is typically 36 bytes total
-    // We need to extract just the 33-byte key (skip the 3-byte header)
-    const protoBuffer = Buffer.from(publicKeyProto);
-    
-    console.log('[IPC] Public key proto length:', protoBuffer.length);
-    
-    // For secp256k1, skip the protobuf wrapper (typically 3-5 bytes at the start)
-    // The actual key starts after: type tag (1 byte) + key type (1 byte) + length varint (1+ bytes)
-    let keyBytes: Buffer;
-    if (protoBuffer.length === 33 || protoBuffer.length === 65) {
-      // Already just the key
-      keyBytes = protoBuffer;
-    } else if (protoBuffer.length === 36) {
-      // 3-byte header + 33-byte key (typical for compressed secp256k1)
-      keyBytes = protoBuffer.slice(3);
-    } else if (protoBuffer.length === 68) {
-      // 3-byte header + 65-byte key (uncompressed)
-      keyBytes = protoBuffer.slice(3);
-    } else {
-      // Try to find the key by looking for the 0x02 or 0x03 prefix (compressed) or 0x04 (uncompressed)
-      let found = false;
-      for (let i = 0; i < protoBuffer.length - 33; i++) {
-        if (protoBuffer[i] === 0x02 || protoBuffer[i] === 0x03) {
-          // Found compressed key prefix
-          keyBytes = protoBuffer.slice(i, i + 33);
-          found = true;
-          break;
-        } else if (protoBuffer[i] === 0x04 && protoBuffer.length >= i + 65) {
-          // Found uncompressed key prefix
-          keyBytes = protoBuffer.slice(i, i + 65);
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        return { success: false, error: `Could not extract key from protobuf (length: ${protoBuffer.length})` };
-      }
-    }
-    
-    console.log('[IPC] Extracted key length:', keyBytes!.length);
-    const publicKey = '0x' + keyBytes!.toString('hex');
+    const publicKey = secp256k1PublicKey;
     
     // Check if we have RPC URL and registry address
     // Force IPv4 to avoid IPv6 connection issues
@@ -625,8 +565,30 @@ ipcMain.handle('node:register', async () => {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
     
-    // Empty signature (not enforced yet)
-    const emptySignature = '0x';
+    // Request signature from the bytecave-core node
+    // The contract expects signature from the secp256k1 key that corresponds to the public key being registered
+    console.log('[IPC] Requesting signature from node...');
+    let signature: string;
+    try {
+      const nodeUrl = process.env.NODE_URL || `http://localhost:${process.env.PORT || 5001}`;
+      const signResponse = await fetch(`${nodeUrl}/sign-registration`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ownerAddress: wallet.address })
+      });
+      
+      if (!signResponse.ok) {
+        const errorText = await signResponse.text();
+        throw new Error(`Failed to get signature: ${errorText}`);
+      }
+      
+      const signData = await signResponse.json();
+      signature = signData.signature;
+      console.log('[IPC] Signature received:', signature.slice(0, 20) + '...');
+    } catch (error: any) {
+      console.error('[IPC] Failed to get signature from node:', error.message);
+      return { success: false, error: `Failed to get signature: ${error.message}` };
+    }
     
     console.log('[IPC] Registering node on-chain...', {
       peerId: peerId.slice(0, 16) + '...',
@@ -644,7 +606,7 @@ ipcMain.handle('node:register', async () => {
       peerId,
       metadataHash,
       stakeAmount,
-      emptySignature,
+      signature,
       { nonce }
     );
     

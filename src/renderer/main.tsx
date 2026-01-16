@@ -506,7 +506,7 @@ function App() {
                     }}>
                       {status.secp256k1PublicKey || 'N/A (node not started)'}
                     </div>
-                    <div className="stat-hint">33 bytes compressed - use this for on-chain node registration</div>
+                    <div className="stat-hint">64 bytes uncompressed - use this for on-chain node registration</div>
                   </div>
                   <div className="stat-card full-width">
                     <div className="stat-label">Ed25519 Public Key (for storage proofs)</div>

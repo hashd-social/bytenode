@@ -63,6 +63,15 @@ if [ -z "$RELAY_PEER" ]; then
     fi
 fi
 
+# Load contract addresses from .env.vault if it exists (created by start-all.sh)
+ENV_VAULT_FILE="$PROJECT_DIR/../.env.vault"
+if [ -f "$ENV_VAULT_FILE" ]; then
+    echo "📋 Loading contract addresses from .env.vault..."
+    source "$ENV_VAULT_FILE"
+else
+    echo "⚠️  .env.vault not found - using defaults or environment variables"
+fi
+
 # Contract addresses from hardhat deployment
 # Default to the deployed contract address if not provided from environment
 # Force IPv4 to avoid IPv6 connection issues in Electron
