@@ -92,7 +92,7 @@ body {
   display: flex;
   gap: 4px;
   padding: 0 24px;
-  background: rgba(0, 0, 0, 0.1);
+  background: rgba(0, 0, 0, 1.0);
   border-bottom: 1px solid rgba(0, 255, 255, 0.1);
   position: sticky;
   top: 73px;

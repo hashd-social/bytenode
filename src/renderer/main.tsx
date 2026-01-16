@@ -442,7 +442,7 @@ function App() {
                 <div className="section-header">Identity</div>
                 <div className="stats-grid">
                   <div className="stat-card full-width">
-                    <div className="stat-label">Node ID</div>
+                    <div className="stat-label">Node ID (on-chain identifier)</div>
                     <div className="stat-value mono">{config?.nodeId || 'N/A'}</div>
                   </div>
                   <div className="stat-card full-width">
@@ -497,11 +497,11 @@ function App() {
                     </div>
                   </div>
                   <div className="stat-card full-width">
-                    <div className="stat-label">secp256k1 Public Key (for contract registration)</div>
+                    <div className="stat-label">Node Public Key (for on-chain registration)</div>
                     <div className="stat-value mono copyable" onClick={() => {
                       if (status.secp256k1PublicKey) {
                         navigator.clipboard.writeText(status.secp256k1PublicKey);
-                        alert('secp256k1 public key copied to clipboard!');
+                        alert('Node public key copied to clipboard!');
                       }
                     }}>
                       {status.secp256k1PublicKey || 'N/A (node not started)'}
@@ -839,7 +839,7 @@ function App() {
         {activeTab === 'settings' && config && (
           <div className="settings-panel">
             <div className="setting-group">
-              <label>Node ID</label>
+              <label>Node ID (on-chain identifier)</label>
               <input 
                 type="text" 
                 value={config.nodeId} 

@@ -629,58 +629,37 @@ ipcMain.handle('node:deregister', async () => {
   const config = getConfig();
   
   try {
-    // Get peer ID from health endpoint
+    // Get secp256k1 public key from health endpoint
     const healthResponse = await fetch(`http://localhost:${config.port}/health`);
     const health = await healthResponse.json();
-    const peerId = health.peerId;
     
-    if (!peerId) {
-      return { success: false, error: 'Could not get peer ID from node' };
-    }
+    // The health endpoint should expose the secp256k1 public key
+    // If not available, try to get it from the node's public key endpoint
+    let secp256k1PublicKey = health.secp256k1PublicKey;
     
-    // Extract public key from peer ID (same logic as registration)
-    const { peerIdFromString } = await import('@libp2p/peer-id');
-    const peerIdObj = peerIdFromString(peerId);
-    
-    if (!peerIdObj.publicKey) {
-      return { success: false, error: 'Could not extract public key from peer ID' };
-    }
-    
-    const publicKeyProto = (peerIdObj.publicKey as any).raw;
-    if (!publicKeyProto) {
-      return { success: false, error: 'Could not get public key from peer ID' };
-    }
-    
-    const protoBuffer = Buffer.from(publicKeyProto);
-    
-    // Extract the actual key bytes (same logic as registration)
-    let keyBytes: Buffer;
-    if (protoBuffer.length === 33 || protoBuffer.length === 65) {
-      keyBytes = protoBuffer;
-    } else if (protoBuffer.length === 36) {
-      keyBytes = protoBuffer.slice(3);
-    } else if (protoBuffer.length === 68) {
-      keyBytes = protoBuffer.slice(3);
-    } else {
-      let found = false;
-      for (let i = 0; i < protoBuffer.length - 33; i++) {
-        if (protoBuffer[i] === 0x02 || protoBuffer[i] === 0x03) {
-          keyBytes = protoBuffer.slice(i, i + 33);
-          found = true;
-          break;
-        } else if (protoBuffer[i] === 0x04 && protoBuffer.length >= i + 65) {
-          keyBytes = protoBuffer.slice(i, i + 65);
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        return { success: false, error: `Could not extract key from protobuf (length: ${protoBuffer.length})` };
+    if (!secp256k1PublicKey) {
+      // Fallback: try to get from /info endpoint or calculate from node data
+      console.log('[IPC] secp256k1PublicKey not in health response, trying to fetch from node...');
+      
+      // Try getting from bytecave-core's p2p service via a dedicated endpoint
+      try {
+        const infoResponse = await fetch(`http://localhost:${config.port}/info`);
+        const info = await infoResponse.json();
+        secp256k1PublicKey = info.secp256k1PublicKey;
+      } catch (err) {
+        console.error('[IPC] Could not get secp256k1 public key from /info endpoint');
       }
     }
     
-    const publicKey = '0x' + keyBytes!.toString('hex');
-    const nodeId = ethers.keccak256(publicKey);
+    if (!secp256k1PublicKey) {
+      return { success: false, error: 'Could not get secp256k1 public key from node. Make sure the node is running with the latest bytecave-core version.' };
+    }
+    
+    // Calculate nodeId from secp256k1 public key (64 bytes uncompressed)
+    const nodeId = ethers.keccak256(secp256k1PublicKey);
+    
+    console.log('[IPC] Deregistration using secp256k1 public key:', secp256k1PublicKey.slice(0, 20) + '...');
+    console.log('[IPC] Calculated nodeId:', nodeId.slice(0, 16) + '...');
     
     // Check if we have RPC URL and registry address
     // Force IPv4 to avoid IPv6 connection issues
