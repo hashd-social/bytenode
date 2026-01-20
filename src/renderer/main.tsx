@@ -1199,21 +1199,10 @@ function App() {
                 })}
                 className="input"
               />
-              <small className="setting-hint">Apps this node accepts storage for (default: hashd). Leave empty to accept all registered apps.</small>
-            </div>
-            <div className="setting-group checkboxes">
-              <label>
-                <input 
-                  type="checkbox" 
-                  checked={config.requireAppRegistry ?? true}
-                  onChange={(e) => setConfig({ ...config, requireAppRegistry: e.target.checked })}
-                />
-                Require AppRegistry Validation
-              </label>
               <small className="setting-hint">
-                When enabled, only accepts storage requests from apps registered in the on-chain AppRegistry contract.
+                Apps this node accepts storage for (default: hashd). 
                 <br />
-                <strong>Recommended: enabled</strong> for production nodes
+                <strong>Leave empty to accept all registered apps.</strong> Set specific apps to filter storage.
               </small>
             </div>
 
