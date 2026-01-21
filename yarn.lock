@@ -558,13 +558,13 @@
     uint8arrays "^5.1.0"
 
 "@libp2p/dcutr@^4.0.0":
-  version "3.0.9"
-  resolved "https://registry.yarnpkg.com/@libp2p/dcutr/-/dcutr-3.0.9.tgz#f80537110ea88e91772e29a7efb6eded1717d6d3"
-  integrity sha512-oO+2dECZ1HEIc9OrFW+mrXSAU5C7uzrdVy+Zdt+wVQHiYPmBBa6gUK0LMMbn4l9n4MlHxG+AqV2Y9WtkrLPJxA==
+  version "3.0.10"
+  resolved "https://registry.yarnpkg.com/@libp2p/dcutr/-/dcutr-3.0.10.tgz#85ef65ac2d3fdf4d273f8b1ea6feb2707f0344f6"
+  integrity sha512-rMBstMznxLgIGNvHFlEHo9Lvx0/+wD2RXB+H7VU58ov1CRQNwlSix38BaQ6PI94LOmVzDPHKl8x3mG6YKp5GEw==
   dependencies:
     "@libp2p/interface" "^3.1.0"
-    "@libp2p/interface-internal" "^3.0.9"
-    "@libp2p/utils" "^7.0.9"
+    "@libp2p/interface-internal" "^3.0.10"
+    "@libp2p/utils" "^7.0.10"
     "@multiformats/multiaddr" "^13.0.1"
     "@multiformats/multiaddr-matcher" "^3.0.1"
     delay "^7.0.0"
@@ -618,6 +618,16 @@
     "@libp2p/interface" "^2.11.0"
     "@libp2p/peer-collections" "^6.0.35"
     "@multiformats/multiaddr" "^12.4.4"
+    progress-events "^1.0.1"
+
+"@libp2p/interface-internal@^3.0.10":
+  version "3.0.10"
+  resolved "https://registry.yarnpkg.com/@libp2p/interface-internal/-/interface-internal-3.0.10.tgz#b92b7fd5f92f488cc9e1afd9c74f517eba060154"
+  integrity sha512-Gd/eQAoAlXqeCRJ6wOwcnTQ/SDe95bQow8osY8zq0nbfFBu26aChQHjAd+CjcCADJRh+Sd+7+dYG7BrhpxGt1A==
+  dependencies:
+    "@libp2p/interface" "^3.1.0"
+    "@libp2p/peer-collections" "^7.0.10"
+    "@multiformats/multiaddr" "^13.0.1"
     progress-events "^1.0.1"
 
 "@libp2p/interface-internal@^3.0.9":
@@ -764,6 +774,16 @@
     "@libp2p/utils" "^6.7.2"
     multiformats "^13.3.6"
 
+"@libp2p/peer-collections@^7.0.10":
+  version "7.0.10"
+  resolved "https://registry.yarnpkg.com/@libp2p/peer-collections/-/peer-collections-7.0.10.tgz#9e3bd643508ae341586b421f496bd6b2438c861c"
+  integrity sha512-OvlSY5N3J6q8U+EbTrQGbW8zdyOa3y7nz9Y3IbuE55tIiMd7pwm1U3Lknfb6IPkOWkHNfQDfCGGfGVQcMRodvQ==
+  dependencies:
+    "@libp2p/interface" "^3.1.0"
+    "@libp2p/peer-id" "^6.0.4"
+    "@libp2p/utils" "^7.0.10"
+    multiformats "^13.4.0"
+
 "@libp2p/peer-collections@^7.0.9":
   version "7.0.9"
   resolved "https://registry.yarnpkg.com/@libp2p/peer-collections/-/peer-collections-7.0.9.tgz#f6ec6486b39b6a82c657234ee5fca3a67eb3e3db"
@@ -886,6 +906,35 @@
   version "7.0.9"
   resolved "https://registry.yarnpkg.com/@libp2p/utils/-/utils-7.0.9.tgz#ec63ff20396cc1b44c8b4158095b6988ef4be301"
   integrity sha512-2wYhsgfbFXfh5ui0ME9MNHc7uUIuZwpeZ/yagKmDSjIP7B+L3/9mj+vVXO14AhmjfwnKx2xUDQvzGZeq5to4ow==
+  dependencies:
+    "@chainsafe/is-ip" "^2.1.0"
+    "@chainsafe/netmask" "^2.0.0"
+    "@libp2p/crypto" "^5.1.13"
+    "@libp2p/interface" "^3.1.0"
+    "@libp2p/logger" "^6.2.2"
+    "@multiformats/multiaddr" "^13.0.1"
+    "@sindresorhus/fnv1a" "^3.1.0"
+    any-signal "^4.1.1"
+    cborg "^4.2.14"
+    delay "^7.0.0"
+    is-loopback-addr "^2.0.2"
+    it-length-prefixed "^10.0.1"
+    it-pipe "^3.0.1"
+    it-pushable "^3.2.3"
+    it-stream-types "^2.0.2"
+    main-event "^1.0.1"
+    netmask "^2.0.2"
+    p-defer "^4.0.1"
+    p-event "^7.0.0"
+    race-signal "^2.0.0"
+    uint8-varint "^2.0.4"
+    uint8arraylist "^2.4.8"
+    uint8arrays "^5.1.0"
+
+"@libp2p/utils@^7.0.10":
+  version "7.0.10"
+  resolved "https://registry.yarnpkg.com/@libp2p/utils/-/utils-7.0.10.tgz#c64e3cef8e7ebf297edecc12958bb194fbada1a4"
+  integrity sha512-+mzD+7yLMoZ8+34y/iS9d1CnwHjJJ/qEsao9FckHf9T9tnVXEyLLu9TpzBCcGRm4fUK/QCSHK2AcZH50kkAFkw==
   dependencies:
     "@chainsafe/is-ip" "^2.1.0"
     "@chainsafe/netmask" "^2.0.0"
@@ -1690,6 +1739,7 @@ buffer@^6.0.3:
     "@libp2p/webrtc" "^6.0.10"
     "@libp2p/websockets" "^10.0.0"
     "@multiformats/multiaddr" "^13.0.0"
+    "@noble/curves" "^2.0.1"
     cors "^2.8.5"
     dotenv "^16.3.1"
     ethers "^6.0.0"
@@ -2145,7 +2195,7 @@ etag@~1.8.1:
   resolved "https://registry.yarnpkg.com/etag/-/etag-1.8.1.tgz#41ae2eeb65efa62268aebfea83ac7d79299b0887"
   integrity sha512-aIL5Fx7mawVa300al2BnEE4iNvo1qETxLrPI/o05L7z6go7fCw1J6EQmbK4FmJ2AS7kgVF/KEZWufBfdClMcPg==
 
-ethers@^6.0.0:
+ethers@^6.0.0, ethers@^6.16.0:
   version "6.16.0"
   resolved "https://registry.yarnpkg.com/ethers/-/ethers-6.16.0.tgz#fff9b4f05d7a359c774ad6e91085a800f7fccf65"
   integrity sha512-U1wulmetNymijEhpSEQ7Ct/P/Jw9/e7R1j5XIbPRydgV2DjLVMsULDlNksq3RQnFgKoLlZf88ijYtWEXcPa07A==

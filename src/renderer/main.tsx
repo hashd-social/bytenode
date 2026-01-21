@@ -51,6 +51,7 @@ interface NodeStatus {
   publicKey?: string;
   secp256k1PublicKey?: string;
   ownerAddress?: string;
+  hashdBalance?: string;
   registeredOnChain?: boolean;
   onChainNodeId?: string;
   peers?: number;
@@ -114,6 +115,7 @@ interface NodeConfig {
   p2pBootstrapPeers: string[];
   p2pRelayPeers: string[];
   p2pEnableRelay: boolean;
+  meshnetAddress?: string; // NordVPN Meshnet hostname
   
   // Sharding
   shardCount: number;
@@ -485,6 +487,12 @@ function App() {
                       </div>
                     </div>
                   </div>
+                {status.hashdBalance && (
+                    <div className="stat-card full-width">
+                      <div className="stat-label">HASHD Token Balance</div>
+                      <div className="stat-value">{parseFloat(status.hashdBalance).toLocaleString()} HASHD</div>
+                    </div>
+                  )}                  
                   <div className="stat-card full-width">
                     <div className="stat-label">Peer ID</div>
                     <div className="stat-value mono copyable" onClick={() => {
@@ -526,6 +534,7 @@ function App() {
                       <div className="stat-value mono">{status.ownerAddress}</div>
                     </div>
                   )}
+  
                 </div>
 
                 {/* Network Section */}
@@ -944,9 +953,26 @@ function App() {
                 rows={5}
               />
               <small className="setting-hint">
-                ✨ Discovered peers are automatically saved here. You can also manually add known peers (one per line).
+                🌐 Discovered peers are automatically saved here for faster reconnection.
                 <br />
                 These peers are persisted in <code>data/config.json</code> and used for reconnection on restart.
+              </small>
+            </div>
+            <div className="setting-group">
+              <label>NordVPN Meshnet Address (VPN-friendly P2P)</label>
+              <input 
+                type="text" 
+                value={config.meshnetAddress || ''} 
+                onChange={(e) => setConfig({ ...config, meshnetAddress: e.target.value })}
+                placeholder="alexx-atlas.nord"
+                className="input"
+              />
+              <small className="setting-hint" style={{ color: '#60a5fa' }}>
+                🌐 Your NordVPN Meshnet hostname for VPN-friendly P2P connections.
+                <br />
+                Allows nodes behind VPNs to connect directly. Format: username-device.nord
+                <br />
+                Leave empty if you don't use NordVPN Meshnet.
               </small>
             </div>
             

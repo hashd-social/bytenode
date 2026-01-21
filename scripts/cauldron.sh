@@ -63,6 +63,15 @@ if [ -z "$RELAY_PEER" ]; then
     fi
 fi
 
+# Load environment variables from bytecave-core .env file
+BYTECAVE_ENV_FILE="$PROJECT_DIR/../bytecave-core/.env"
+if [ -f "$BYTECAVE_ENV_FILE" ]; then
+    echo "📋 Loading environment variables from bytecave-core/.env..."
+    source "$BYTECAVE_ENV_FILE"
+else
+    echo "⚠️  bytecave-core/.env not found"
+fi
+
 # Load contract addresses from .env.vault if it exists (created by start-all.sh)
 ENV_VAULT_FILE="$PROJECT_DIR/../.env.vault"
 if [ -f "$ENV_VAULT_FILE" ]; then
@@ -77,6 +86,11 @@ fi
 # Force IPv4 to avoid IPv6 connection issues in Electron
 RPC_URL="${RPC_URL:-http://127.0.0.1:8545}"
 VAULT_REGISTRY_ADDRESS="${VAULT_REGISTRY_ADDRESS:-0xc3e53F4d16Ae77Db1c982e75a937B9f60FE63690}"
+
+# Meshnet configuration
+# Set your NordVPN Meshnet hostname here for VPN-friendly P2P connections
+# Format: alexx-atlas.nord (your NordVPN Meshnet hostname)
+MESHNET_ADDRESS="${MESHNET_ADDRESS:-}"
 
 # Hardhat default wallets (for testing)
 # Wallet 0: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 (used by dashboard/owner)
@@ -95,13 +109,25 @@ WALLET_4_KEY="0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a
 
 # Launch Instance 1 (Bat Alpha) - Port 5001, P2P 5011-5012 - Wallet 1
 echo -e "${CYAN}🦇 Launching Bat Alpha (port 5001) - Wallet 1...${NC}"
+echo -e "${CYAN}   📋 Environment Variables:${NC}"
+echo -e "${CYAN}   VAULT_REGISTRY_ADDRESS: ${VAULT_REGISTRY_ADDRESS:-'NOT SET'}${NC}"
+echo -e "${CYAN}   HASHD_TOKEN_ADDRESS: ${HASHD_TOKEN_ADDRESS:-'NOT SET'}${NC}"
+echo -e "${CYAN}   CONTENT_REGISTRY_ADDRESS: ${CONTENT_REGISTRY_ADDRESS:-'NOT SET'}${NC}"
+echo -e "${CYAN}   RPC_URL: ${RPC_URL:-'NOT SET'}${NC}"
+echo -e "${CYAN}   MESHNET_ADDRESS: ${MESHNET_ADDRESS:-'NOT SET'}${NC}"
+echo -e "${CYAN}   OWNER_ADDRESS: ${WALLET_1_ADDRESS}${NC}"
+echo -e "${CYAN}   NODE_URL: http://localhost:5001${NC}"
+echo ""
 BYTENODE_PORT=5001 \
 BYTENODE_NODE_ID=bat-alpha \
 BYTENODE_P2P_PORTS="5011,5012" \
 BYTENODE_RELAY_PEERS="$RELAY_PEER" \
 NODE_URL="http://localhost:5001" \
-RPC_URL="$RPC_URL" \
 VAULT_REGISTRY_ADDRESS="$VAULT_REGISTRY_ADDRESS" \
+HASHD_TOKEN_ADDRESS="$HASHD_TOKEN_ADDRESS" \
+CONTENT_REGISTRY_ADDRESS="$CONTENT_REGISTRY_ADDRESS" \
+CONTENT_REGISTRY_STORAGE_ADDRESS="$CONTENT_REGISTRY_STORAGE_ADDRESS" \
+MESHNET_ADDRESS="$MESHNET_ADDRESS" \
 OWNER_ADDRESS="$WALLET_1_ADDRESS" \
 PRIVATE_KEY="$WALLET_1_KEY" \
 "$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-alpha" > "$PROJECT_DIR/test-data/logs/bat-alpha.log" 2>&1 &
@@ -110,13 +136,23 @@ sleep 2
 
 # Launch Instance 2 (Bat Beta) - Port 5002, P2P 5021-5022 - Wallet 2
 echo -e "${GREEN}🦇 Launching Bat Beta (port 5002) - Wallet 2...${NC}"
+echo -e "${GREEN}   📋 Environment Variables:${NC}"
+echo -e "${GREEN}   VAULT_REGISTRY_ADDRESS: ${VAULT_REGISTRY_ADDRESS:-'NOT SET'}${NC}"
+echo -e "${GREEN}   HASHD_TOKEN_ADDRESS: ${HASHD_TOKEN_ADDRESS:-'NOT SET'}${NC}"
+echo -e "${GREEN}   CONTENT_REGISTRY_ADDRESS: ${CONTENT_REGISTRY_ADDRESS:-'NOT SET'}${NC}"
+echo -e "${GREEN}   RPC_URL: ${RPC_URL:-'NOT SET'}${NC}"
+echo -e "${GREEN}   MESHNET_ADDRESS: ${MESHNET_ADDRESS:-'NOT SET'}${NC}"
+echo -e "${GREEN}   OWNER_ADDRESS: ${WALLET_2_ADDRESS}${NC}"
+echo -e "${GREEN}   NODE_URL: http://localhost:5002${NC}"
+echo ""
 BYTENODE_PORT=5002 \
 BYTENODE_NODE_ID=bat-beta \
 BYTENODE_P2P_PORTS="5021,5022" \
 BYTENODE_RELAY_PEERS="$RELAY_PEER" \
 NODE_URL="http://localhost:5002" \
-RPC_URL="$RPC_URL" \
 VAULT_REGISTRY_ADDRESS="$VAULT_REGISTRY_ADDRESS" \
+HASHD_TOKEN_ADDRESS="$HASHD_TOKEN_ADDRESS" \
+CONTENT_REGISTRY_ADDRESS="$CONTENT_REGISTRY_ADDRESS" \
 OWNER_ADDRESS="$WALLET_2_ADDRESS" \
 PRIVATE_KEY="$WALLET_2_KEY" \
 "$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-beta" > "$PROJECT_DIR/test-data/logs/bat-beta.log" 2>&1 &
@@ -125,13 +161,23 @@ sleep 2
 
 # Launch Instance 3 (Bat Gamma) - Port 5003, P2P 5031-5032 - Wallet 3
 echo -e "${YELLOW}🦇 Launching Bat Gamma (port 5003) - Wallet 3...${NC}"
+echo -e "${YELLOW}   📋 Environment Variables:${NC}"
+echo -e "${YELLOW}   VAULT_REGISTRY_ADDRESS: ${VAULT_REGISTRY_ADDRESS:-'NOT SET'}${NC}"
+echo -e "${YELLOW}   HASHD_TOKEN_ADDRESS: ${HASHD_TOKEN_ADDRESS:-'NOT SET'}${NC}"
+echo -e "${YELLOW}   CONTENT_REGISTRY_ADDRESS: ${CONTENT_REGISTRY_ADDRESS:-'NOT SET'}${NC}"
+echo -e "${YELLOW}   RPC_URL: ${RPC_URL:-'NOT SET'}${NC}"
+echo -e "${YELLOW}   MESHNET_ADDRESS: ${MESHNET_ADDRESS:-'NOT SET'}${NC}"
+echo -e "${YELLOW}   OWNER_ADDRESS: ${WALLET_3_ADDRESS}${NC}"
+echo -e "${YELLOW}   NODE_URL: http://localhost:5003${NC}"
+echo ""
 BYTENODE_PORT=5003 \
 BYTENODE_NODE_ID=bat-gamma \
 BYTENODE_P2P_PORTS="5031,5032" \
 BYTENODE_RELAY_PEERS="$RELAY_PEER" \
 NODE_URL="http://localhost:5003" \
-RPC_URL="$RPC_URL" \
 VAULT_REGISTRY_ADDRESS="$VAULT_REGISTRY_ADDRESS" \
+HASHD_TOKEN_ADDRESS="$HASHD_TOKEN_ADDRESS" \
+CONTENT_REGISTRY_ADDRESS="$CONTENT_REGISTRY_ADDRESS" \
 OWNER_ADDRESS="$WALLET_3_ADDRESS" \
 PRIVATE_KEY="$WALLET_3_KEY" \
 "$ELECTRON" "$PROJECT_DIR" --user-data-dir="$PROJECT_DIR/test-data/bat-gamma" > "$PROJECT_DIR/test-data/logs/bat-gamma.log" 2>&1 &

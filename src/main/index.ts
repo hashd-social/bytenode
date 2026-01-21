@@ -529,7 +529,11 @@ ipcMain.handle('node:register', async () => {
     const wallet = new ethers.Wallet(privateKey, provider);
     
     // Get HASHD token contract
-    const hashdTokenAddress = process.env.HASHD_TOKEN || '0x7a2088a1bFc9d81c55368AE168C2C02570cB814F';
+    const hashdTokenAddress = process.env.HASHD_TOKEN_ADDRESS;
+    if (!hashdTokenAddress) {
+      throw new Error('HASHD_TOKEN_ADDRESS not configured');
+    }
+    
     const hashdAbi = [
       'function approve(address spender, uint256 amount) returns (bool)',
       'function allowance(address owner, address spender) view returns (uint256)'
