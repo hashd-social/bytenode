@@ -82,14 +82,6 @@ Click **Settings** tab and configure:
 - HASHD token contract address
 - RPC URL
 
-**⚠️ Wallet Private Key Security:**
-- **Use a fresh wallet** dedicated only to this node
-- **Do NOT use a wallet** that contains other tokens or significant balances
-- The wallet private key is required for on-chain registration/deregistration
-- Your private key **NEVER leaves your computer**
-- It is only used locally to sign blockchain transactions
-- Store it securely in the settings or `.env` file
-
 ### 3. Configure Wallet Private Key (For Registration)
 
 **Security Best Practices:**
