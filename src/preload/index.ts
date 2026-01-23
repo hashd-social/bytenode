@@ -27,6 +27,12 @@ contextBridge.exposeInMainWorld('bytecave', {
     },
     onBroadcast: (callback: (data: any) => void) => {
       ipcRenderer.on('broadcast:received', (_event, data) => callback(data));
+    },
+    onLog: (callback: (data: { message: string; isError?: boolean }) => void) => {
+      ipcRenderer.on('node:log', (_event, data) => callback(data));
+    },
+    removeLogListener: () => {
+      ipcRenderer.removeAllListeners('node:log');
     }
   },
   peer: {

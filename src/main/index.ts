@@ -310,6 +310,12 @@ async function startNode(): Promise<void> {
       const output = data.toString();
       console.log('[bytecave-core]', output);
       
+      // Forward logs to renderer for Logs tab
+      mainWindow?.webContents.send('node:log', {
+        message: output,
+        isError: false
+      });
+      
       // Parse log output for events - check for various forms of the ready message
       if (output.includes('Server ready') || output.includes('ready for requests')) {
         console.log('[startNode] Detected server ready, setting nodeRunning=true');
@@ -343,7 +349,14 @@ async function startNode(): Promise<void> {
   // Capture stderr with error handling
   nodeProcess.stderr?.on('data', (data: Buffer) => {
     try {
-      console.error('[bytecave-core error]', data.toString());
+      const output = data.toString();
+      console.error('[bytecave-core error]', output);
+      
+      // Forward error logs to renderer for Logs tab
+      mainWindow?.webContents.send('node:log', {
+        message: output,
+        isError: true
+      });
     } catch {
       // Ignore errors during shutdown
     }

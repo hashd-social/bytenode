@@ -439,39 +439,6 @@ Disable auto-update in settings if needed.
 
 MIT
 
-## On-Chain Registration
-
-### Registration Process
-
-1. **Configure Wallet**
-   - Set private key in settings
-   - Ensure wallet has 1000+ HASHD tokens
-   - Set contract addresses (Vault Registry, HASHD Token)
-
-2. **Register Node**
-   - Click "Register" button
-   - Node extracts public key from peer ID
-   - Stakes 1000 HASHD tokens
-   - Registers on VaultNodeRegistry contract
-
-3. **Monitor Status**
-   - Dashboard shows "Registered on-chain" status
-   - View staked amount and registration details
-
-### Deregistration Process
-
-1. **Stop Node** (optional but recommended)
-2. **Click Deregister**
-   - Node calculates nodeId from peer ID
-   - Calls deregisterNode on contract
-   - Staked HASHD returned to wallet
-
-3. **Verify**
-   - Status changes to "Not registered"
-   - Check wallet for returned HASHD
-
-**Note:** Registration and deregistration require the same wallet that owns the node.
-
 ## Related Packages
 
 - **bytecave-core** - Storage node implementation

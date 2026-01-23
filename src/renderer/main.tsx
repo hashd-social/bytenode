@@ -7,6 +7,7 @@ import { createRoot } from 'react-dom/client';
 import './styles.css';
 import bytebatLogo from './assets/bytebat.png';
 import { NodePolicyTab } from './NodePolicyTab';
+import { LogsTab } from './LogsTab';
 
 declare global {
   interface Window {
@@ -52,7 +53,7 @@ interface NodeStatus {
   secp256k1PublicKey?: string;
   ownerAddress?: string;
   hashdBalance?: string;
-  registeredOnChain?: boolean;
+  isRegistered?: boolean;
   onChainNodeId?: string;
   peers?: number;
   p2p?: {
@@ -172,7 +173,7 @@ function App() {
   const [peers, setPeers] = useState<PeerInfo[]>([]);
   const [config, setConfig] = useState<NodeConfig | null>(null);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'status' | 'peers' | 'broadcast' | 'policy' | 'settings'>('status');
+  const [activeTab, setActiveTab] = useState<'status' | 'peers' | 'broadcast' | 'policy' | 'logs' | 'settings'>('status');
   const [relayPeerIds, setRelayPeerIds] = useState<string[]>([]);
   const [broadcasts, setBroadcasts] = useState<Array<{from: string; message: string; timestamp: number}>>([]);
   const [broadcastMessage, setBroadcastMessage] = useState('');
@@ -392,6 +393,12 @@ function App() {
           Policy
         </button>
         <button 
+          className={`tab ${activeTab === 'logs' ? 'active' : ''}`}
+          onClick={() => setActiveTab('logs')}
+        >
+          Logs
+        </button>
+        <button 
           className={`tab ${activeTab === 'settings' ? 'active' : ''}`}
           onClick={() => setActiveTab('settings')}
         >
@@ -452,7 +459,7 @@ function App() {
                     <div className="stat-value">
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'space-between' }}>
                         <div>
-                          {status.registeredOnChain ? (
+                          {status.isRegistered ? (
                             <span style={{ color: '#4ade80' }}>✓ Registered</span>
                           ) : (
                             <span style={{ color: '#f87171' }}>✗ Not Registered</span>
@@ -465,7 +472,7 @@ function App() {
                         </div>
                         {status.peerId && (
                           <>
-                            {status.registeredOnChain ? (
+                            {status.isRegistered ? (
                               <button 
                                 className="btn btn-secondary"
                                 onClick={handleDeregister}
@@ -843,6 +850,10 @@ function App() {
               window.bytecave.config.set(newConfig);
             }}
           />
+        )}
+
+        {activeTab === 'logs' && (
+          <LogsTab />
         )}
 
         {activeTab === 'settings' && config && (
