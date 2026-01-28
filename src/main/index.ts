@@ -281,8 +281,7 @@ async function startNode(): Promise<void> {
     OWNER_ADDRESS: config.ownerAddress || '',
     PRIVATE_KEY: config.walletPrivateKey || '',
     PUBLIC_KEY: config.publicKey || '',
-    RPC_URL: config.rpcUrl || '',
-    VAULT_REGISTRY_ADDRESS: config.registryAddress || ''
+    RPC_URL: config.rpcUrl || ''
   };
 
   console.log(`Starting bytecave-core from: ${corePath}`);

@@ -466,7 +466,7 @@ function App() {
                           )}
                           {status.onChainNodeId && (
                             <div style={{ fontSize: '0.8em', marginTop: '4px', opacity: 0.7 }}>
-                              {status.onChainNodeId.slice(0, 16)}...
+                              {status.onChainNodeId}
                             </div>
                           )}
                         </div>
