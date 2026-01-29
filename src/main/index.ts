@@ -581,29 +581,18 @@ ipcMain.handle('node:register', async () => {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
     
-    // Request signature from the bytecave-core node
-    // The contract expects signature from the secp256k1 key that corresponds to the public key being registered
-    console.log('[IPC] Requesting signature from node...');
+    // Generate signature with the wallet (node operator's Ethereum account)
+    // The contract validates that the signature comes from the wallet calling registerNode
+    console.log('[IPC] Generating signature with wallet...');
     let signature: string;
     try {
-      const nodeUrl = process.env.NODE_URL || `http://localhost:${process.env.PORT || 5001}`;
-      const signResponse = await fetch(`${nodeUrl}/sign-registration`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ownerAddress: wallet.address })
-      });
-      
-      if (!signResponse.ok) {
-        const errorText = await signResponse.text();
-        throw new Error(`Failed to get signature: ${errorText}`);
-      }
-      
-      const signData = await signResponse.json();
-      signature = signData.signature;
-      console.log('[IPC] Signature received:', signature.slice(0, 20) + '...');
+      // Sign the owner address (wallet.address) with the wallet's private key
+      const messageHash = ethers.keccak256(ethers.solidityPacked(['address'], [wallet.address]));
+      signature = await wallet.signMessage(ethers.getBytes(messageHash));
+      console.log('[IPC] Signature generated:', signature.slice(0, 20) + '...');
     } catch (error: any) {
-      console.error('[IPC] Failed to get signature from node:', error.message);
-      return { success: false, error: `Failed to get signature: ${error.message}` };
+      console.error('[IPC] Failed to generate signature:', error.message);
+      return { success: false, error: `Failed to generate signature: ${error.message}` };
     }
     
     console.log('[IPC] Registering node on-chain...', {
