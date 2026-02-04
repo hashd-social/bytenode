@@ -1,6 +1,10 @@
 # ByteNode
 
-Desktop application for managing ByteCave storage nodes with an intuitive GUI. Built with Electron, React, and TypeScript.
+ByteCave Desktop, also referred to as ByteNode, is a user-operated ByteCave Core node packaged as a desktop application. It allows individuals to run a storage and relay-capable node on their own machine without needing to manage the underlying networking or configuration manually.
+
+ByteNode participates in the ByteCave peer-to-peer network by storing and replicating encrypted, content-addressed data, advertising availability to peers, and optionally acting as a relay for connectivity. Like all ByteCave nodes, it never sees plaintext data, never holds application encryption keys, and has no special authority over what it stores or serves.
+
+For HASHD users, ByteNode provides a way to support the network directly — improving availability, reducing reliance on third-party infrastructure, and enabling local-first workflows. For developers and operators, it’s the simplest way to run a full ByteCave node without deploying server infrastructure.
 
 ## Features
 
@@ -9,8 +13,7 @@ Desktop application for managing ByteCave storage nodes with an intuitive GUI. B
 - **Deregistration** - Deregister nodes and recover staked tokens
 - **Configuration UI** - Easy setup for P2P, storage, and blockchain settings
 - **Real-time Monitoring** - View node status, peers, storage metrics, and registration status
-- **WebRTC Support** - Direct browser-to-node P2P connections (no HTTP required)
-- **Multi-Node Support** - Run multiple nodes with different configurations
+- **Multi-Instance Testing** - Run multiple node instances for development and testing
 - **Integrated Logs** - View node logs directly in the app
 - **Tray Integration** - Minimize to system tray for background operation
 
@@ -250,18 +253,23 @@ Minimize to tray for background operation:
 - **Start/Stop Node** - Quick node control
 - **Quit** - Exit application
 
-## Multi-Node Setup
+## Multi-Instance Testing
 
-Run multiple nodes with different configurations:
+**Note:** This is primarily a developer/testing feature, not a production multi-node manager.
 
-1. Create separate data directories
-2. Use different ports for each node
-3. Assign different shard ranges
-4. Save configurations with unique node IDs
+Run multiple node instances for testing replication:
 
-Example:
-- Node 1: Port 5001, Shards 0-511
-- Node 2: Port 5002, Shards 512-1023
+1. Launch the app multiple times (separate Electron instances)
+2. Each instance uses different data directories (e.g., `~/.bytecave/bat-alpha`, `~/.bytecave/bat-beta`)
+3. Configure different ports for each instance
+4. Assign different shard ranges if needed
+
+Example test setup:
+- Instance 1: Port 5001, bat-alpha data directory
+- Instance 2: Port 5002, bat-beta data directory
+- Instance 3: Port 5003, bat-gamma data directory
+
+Each instance runs independently with no coordination between them.
 
 ## Troubleshooting
 
@@ -407,11 +415,12 @@ yarn package
 
 ## Security
 
-- Private keys stored in encrypted data directory
-- No sensitive data in logs
-- Secure IPC communication between processes
-- Auto-update with signature verification
-- Sandboxed renderer process
+- Private keys stored locally in data directory (ensure proper file system permissions)
+- Secure IPC communication between processes via Electron's contextBridge
+- Sandboxed renderer process (Electron security best practices)
+- No network transmission of private keys
+
+**Important:** The desktop app stores configuration including wallet private keys in plain JSON files. Ensure your data directory has appropriate file system permissions and is not accessible to unauthorized users.
 
 ## Performance
 
@@ -419,14 +428,6 @@ yarn package
 - Efficient memory management
 - Background processing for storage operations
 - Optimized P2P connection handling
-
-## Updates
-
-The app checks for updates on startup:
-- **Auto-update** (macOS/Windows) - Downloads and installs automatically
-- **Manual update** (Linux) - Notifies user of new version
-
-Disable auto-update in settings if needed.
 
 ## System Requirements
 
@@ -444,6 +445,18 @@ MIT
 - **bytecave-core** - Storage node implementation
 - **bytecave-relay** - Relay node for NAT traversal
 - **bytecave-browser** - Browser client library
+
+## Roadmap
+
+### Planned Features
+
+- **Auto-Update System** - Implement `electron-updater` for automatic application updates
+  - Signature verification for update packages
+  - Configurable update channels (stable, beta)
+  - User-controlled update preferences
+- **Enhanced Multi-Node UI** - Built-in interface for managing multiple nodes from single app
+- **Performance Metrics Dashboard** - Real-time charts for storage, bandwidth, and replication
+- **Backup & Restore** - Automated backup of node keys and configuration
 
 ## Support
 
